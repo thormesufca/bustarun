@@ -3,4 +3,4 @@
 freeglut/
 
 #Extension
-.exe
+*.exe
