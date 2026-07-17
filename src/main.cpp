@@ -10,6 +10,10 @@ bool isFullscreen = false;
 
 GLuint texProfessor; // Variável para armazenar a textura
 OBJModel estudanteModel;
+GLuint texPisoUFCA;
+GLuint texParedeUFCA;
+
+float offsetCenario = 0.0f; // Faz o cenario se mover
 
 void init() {
     // Define a cor do céu
@@ -22,11 +26,20 @@ void init() {
     glEnable(GL_LIGHTING);   // Permite usar materiais
     glEnable(GL_LIGHT0);     // Ativa a Luz 0
     
-    // Luz branca para ser o Sol
-    GLfloat luz_pos[] = { 0.0f, 10.0f, 10.0f, 1.0f };
-    glLightfv(GL_LIGHT0, GL_POSITION, luz_pos);
+    // Iluminação
+    GLfloat luz_posicao[]   = { 0.0f, 5.0f, 15.0f, 1.0f }; 
+    GLfloat luz_ambiente[]  = { 0.3f, 0.3f, 0.3f, 1.0f }; // Ilumina as sombras
+    GLfloat luz_difusa[]    = { 0.8f, 0.8f, 0.8f, 1.0f }; // Cor principal da luz
+    GLfloat luz_especular[] = { 1.0f, 1.0f, 1.0f, 1.0f }; // Brilho para reflexos fortes
+
+    glLightfv(GL_LIGHT0, GL_POSITION, luz_posicao);
+    glLightfv(GL_LIGHT0, GL_AMBIENT, luz_ambiente);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, luz_difusa);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, luz_especular);
 
     texProfessor = loadTexture("assets/textures/fig1.png");
+    texPisoUFCA = loadTexture("assets/textures/fig2.png");
+    texParedeUFCA = loadTexture("assets/textures/fig3.png");
 
     if (!estudanteModel.load("assets/models/estudante.obj")) {
          std::cerr << "Falha ao carregar o modelo do estudante!" << std::endl;
@@ -53,8 +66,54 @@ void reshape(int w, int h) {
     gluPerspective(70.0f, aspect, 0.1f, 100.0f);
 }
 
+void desenharCorredores() {
+    glEnable(GL_TEXTURE_2D);
+
+    // Material neutro para as paredes e chão não brilharem demais
+    GLfloat mat_cenario[] = { 0.9f, 0.9f, 0.9f, 1.0f };
+    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_cenario);
+    glMaterialf(GL_FRONT, GL_SHININESS, 0.0f); // Cenário é fosco
+
+    // 1. CHÃO (Piso da UFCA)
+    glBindTexture(GL_TEXTURE_2D, texPisoUFCA); // DESCOMENTADO!
+    glBegin(GL_QUADS);
+        // Desliza a textura no eixo V (profundidade do chão)
+        glTexCoord2f(0.0f, 0.0f - offsetCenario); glVertex3f(-4.0f, 0.0f,  15.0f);
+        glTexCoord2f(1.0f, 0.0f - offsetCenario); glVertex3f( 4.0f, 0.0f,  15.0f);
+        glTexCoord2f(1.0f, 10.0f - offsetCenario); glVertex3f( 4.0f, 0.0f, -30.0f);
+        glTexCoord2f(0.0f, 10.0f - offsetCenario); glVertex3f(-4.0f, 0.0f, -30.0f);
+    glEnd();
+
+    // 2. PAREDE ESQUERDA (Tijolos ou pintura)
+    glBindTexture(GL_TEXTURE_2D, texParedeUFCA); // DESCOMENTADO!
+    glBegin(GL_QUADS);
+        // CORREÇÃO: O offset agora é no eixo U (horizontal) e nos 4 cantos para não rasgar!
+        glTexCoord2f(0.0f - offsetCenario, 0.0f);  glVertex3f(-4.0f, 0.0f,  15.0f);
+        glTexCoord2f(10.0f - offsetCenario, 0.0f); glVertex3f(-4.0f, 0.0f, -30.0f);
+        glTexCoord2f(10.0f - offsetCenario, 1.0f); glVertex3f(-4.0f, 10.0f, -30.0f);
+        glTexCoord2f(0.0f - offsetCenario, 1.0f);  glVertex3f(-4.0f, 10.0f,  15.0f);
+    glEnd();
+
+    // 3. PAREDE DIREITA
+    glBindTexture(GL_TEXTURE_2D, texParedeUFCA); // DESCOMENTADO!
+    glBegin(GL_QUADS);
+        // CORREÇÃO: Mesma coisa, desliza suavemente no eixo U
+        glTexCoord2f(0.0f - offsetCenario, 0.0f);  glVertex3f( 4.0f, 0.0f,  15.0f);
+        glTexCoord2f(10.0f - offsetCenario, 0.0f); glVertex3f( 4.0f, 0.0f, -30.0f);
+        glTexCoord2f(10.0f - offsetCenario, 1.0f); glVertex3f( 4.0f, 10.0f, -30.0f);
+        glTexCoord2f(0.0f - offsetCenario, 1.0f);  glVertex3f( 4.0f, 10.0f,  15.0f);
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+}
+
+
 void desenharCena() {
-    glDisable(GL_TEXTURE_2D); // Desativa para desenhar cor sólida [Mudar depois para uma textura de piso da ufca]
+
+
+
+    
+    /*glDisable(GL_TEXTURE_2D); // Desativa para desenhar cor sólida [Mudar depois para uma textura de piso da ufca]
     // Material fosco para o asfalto
     GLfloat mat_chao[] = { 0.2f, 0.2f, 0.2f, 1.0f };
     glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_chao);
@@ -65,7 +124,7 @@ void desenharCena() {
         glVertex3f( 4.0f, 0.0f,  15.0f);
         glVertex3f( 4.0f, 0.0f, -30.0f);
         glVertex3f(-4.0f, 0.0f, -30.0f);
-    glEnd();
+    glEnd();*/
     glEnable(GL_TEXTURE_2D); // Reativa as texturas
     
     // Desenha professor
@@ -142,6 +201,7 @@ void display() {
     );
 
     // --- AQUI ENTRARÃO OS DESENHOS DOS OBJETOS ---
+    desenharCorredores();
     desenharCena(); 
 
     // Double Buffer
@@ -175,6 +235,15 @@ void specialKeys(int key, int x, int y) {
 
 // Loop Principal
 void timer(int value) {
+    // Incrementa a velocidade do cenário (Ajuste o 0.05f para mais rápido ou mais devagar)
+    offsetCenario += 0.05f; 
+    
+    // Reseta o offset para não estourar o limite de memória do float
+    if (offsetCenario > 10.0f) {
+        offsetCenario -= 10.0f;
+    }
+
+
     // Faz o OpenGL renderizar novamente
     glutPostRedisplay();
 
