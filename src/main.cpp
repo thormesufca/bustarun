@@ -12,6 +12,9 @@ bool isFullscreen = false;
 // Variáveis de Objetos
 OBJModel estudanteModel;
 
+// Variáveis do jogo
+bool gameOver = false;
+
 // Variáveis de Texturas
 GLuint texProfessor; 
 GLuint texPisoUFCA;
@@ -23,16 +26,33 @@ float playerY = 0.0f;   // Posição Y
 bool isJumping = false; // Se está pulando
 float jumpSpeed = 0.0f; // Força do pulo
 
+// Variáveis do Professor
+float professorZ = -15.0f;      // Localização do Professor
+float profSpeed = 0.01f;        // Velocidade dele
+const float Z_PERIGO = -5.0f;   // Distância para erro = gameover
+const float Z_GAMEOVER = -3.0f; // Distância para gameover
+
 // Variáveis de Cenário
 float offsetCenario = 0.0f; // Faz o cenario se mover
 
-struct Obstaculo { 
+// Struct dos objetos presentes no jogo
+enum TipoObjeto {OBSTACULO, PROVA};
+struct Objeto {  
     float x, y, z;
     bool ativo;
+    TipoObjeto tipo;
 };
-
 const int MAX_OBSTACULOS = 5;           // Qtd max de obstaculos na tela
-Obstaculo obstaculos[MAX_OBSTACULOS];   // Lista de obstaculos
+Objeto obstaculos[MAX_OBSTACULOS];   // Lista de obstaculos
+
+const int MAX_PROVAS = 2;
+Objeto provas[MAX_PROVAS];
+
+// Variáveis para o tremor
+int tremorTempo = 0;            // Quantos frames a tela vai tremer
+float intensidadeTremor = 0.3f; // O quão forte a tela balança
+
+
 
 
 void init() {
@@ -138,7 +158,7 @@ void desenharCena() {
     glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_prof);
 
     glPushMatrix();
-        glTranslatef(0.0f, 5.0f, -12.0f); 
+        glTranslatef(0.0f, 3.0f, professorZ); 
         glBegin(GL_QUADS);
             glTexCoord2f(0.0f, 0.0f); glVertex3f(-5.0f, -5.0f, 0.0f);
             glTexCoord2f(1.0f, 0.0f); glVertex3f( 5.0f, -5.0f, 0.0f);
@@ -152,16 +172,12 @@ void desenharCena() {
     glPushMatrix();
         // Define um periodo com base no loop do jogo
         float tempo = glutGet(GLUT_ELAPSED_TIME) / 1000.0f; 
-        float balancoCorrida = sin(tempo * 15.0f) * 0.1f;
-        //glTranslatef(0.0f, 1.0f + balancoCorrida, 0.0f);
+        float balancoCorrida = gameOver ? 0.0f : (sin(tempo * 15.0f) * 0.1f);
         glTranslatef(playerX, 1.0f + playerY + balancoCorrida, 0.0f);
         
-        float inclinacao = cos(tempo * 7.0f) * 5.0f;
-        glRotatef(inclinacao, 0.0f, 0.0f, 1.0f); // Gira no eixo Z
-        glRotatef(180.0f, 0.0f, 1.0f, 0.0f); // Deixa o boneco de frente para a câmera
-
-        //glTranslatef(0.0f, 1.0f, 0.0f);
-        //glRotatef(180.0f, 0.0f, 1.0f, 0.0f);
+        float inclinacao = gameOver ? 0.0f : (cos(tempo * 7.0f) * 5.0f);
+        glRotatef(inclinacao, 0.0f, 0.0f, 1.0f); 
+        glRotatef(180.0f, 0.0f, 1.0f, 0.0f);
 
         GLfloat mat_amb[]  = { 0.2f, 0.2f, 0.2f, 1.0f }; // Luz natural do corpo
         GLfloat mat_dif[]  = { 0.1f, 0.3f, 0.8f, 1.0f }; // Roupa azul refletindo
@@ -179,18 +195,30 @@ void desenharCena() {
     glPopMatrix();
 
     // Desenha os obstáculos
-    GLfloat mat_obs[] = { 0.9f, 0.8f, 0.1f, 1.0f };
-    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_obs);
     glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
-
     for (int i = 0; i < MAX_OBSTACULOS; i++) {
         if (obstaculos[i].ativo) {
             glPushMatrix();
-                // Usa a posição exata da struct
                 glTranslatef(obstaculos[i].x, obstaculos[i].y, obstaculos[i].z);
-                
-                // Por enquanto usaremos um cubo 
+                GLfloat mat_obs[] = { 0.8f, 0.1f, 0.1f, 1.0f }; // Vermelho
+                glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_obs);
                 glutSolidCube(1.0f); 
+            glPopMatrix();
+        }
+    }
+
+    // Desenha as provas
+    for (int i = 0; i < MAX_PROVAS; i++) {
+        if (provas[i].ativo) {
+            glPushMatrix();
+                glTranslatef(provas[i].x, provas[i].y, provas[i].z);
+                GLfloat mat_prova[] = { 0.9f, 0.8f, 0.1f, 1.0f }; // Amarelo Dourado
+                glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_prova);
+                
+                // Faz a prova girar
+                float tempoAnim = glutGet(GLUT_ELAPSED_TIME) / 10.0f;
+                glRotatef(tempoAnim, 0.0f, 1.0f, 0.0f);
+                glutSolidCube(0.8f); 
             glPopMatrix();
         }
     }
@@ -214,10 +242,19 @@ void display() {
         0.0f, 1.0f, 0.0f     // Vetor Up (x, y, z)
     );
 
+    glPushMatrix(); // Salva a matriz da camera limpa
+    if (tremorTempo > 0) {
+        // Gera valores aleatórios entre -intensidadeTremor e +intensidadeTremor
+        float dx = ((rand() % 100) / 100.0f - 0.5f) * intensidadeTremor;
+        float dy = ((rand() % 100) / 100.0f - 0.5f) * intensidadeTremor;
+        glTranslatef(dx, dy, 0.0f);
+    }
+
     // --- AQUI ENTRARÃO OS DESENHOS DOS OBJETOS ---
     desenharCorredores();
     desenharCena(); 
 
+    glPopMatrix();
     // Double Buffer
     glutSwapBuffers();
 }
@@ -265,6 +302,18 @@ void specialKeys(int key, int x, int y) {
 
 // Loop Principal
 void timer(int value) {
+    
+    if (gameOver) {
+        professorZ += 0.3f; 
+        if (professorZ > 12.0f) {
+            exit(0); 
+        }
+        glutPostRedisplay();
+        glutTimerFunc(16, timer, 0);
+        return; 
+    }
+    
+    
     // Incrementa a velocidade do cenário (Ajuste o 0.05f para mais rápido ou mais devagar)
     offsetCenario += 0.05f; 
     // Reseta o offset para não estourar o limite de memória do float
@@ -282,32 +331,78 @@ void timer(int value) {
         }
     }
 
-    // Fisica dos objetos
+    if (professorZ < Z_GAMEOVER) {
+        professorZ += profSpeed; 
+    } else {
+        gameOver = true; 
+    }
+
+    if (tremorTempo > 0) tremorTempo--;
+
+    // --- LÓGICA DOS OBSTÁCULOS ---
     for (int i = 0; i < MAX_OBSTACULOS; i++) {
         if (obstaculos[i].ativo) {
-            // Translação Invertida vai em direção ao professor
-            obstaculos[i].z -= 0.35f; 
-            
-            // Se passou do cenário (Z < -15), desativa para não pesar
-            if (obstaculos[i].z < -15.0f) {
-                obstaculos[i].ativo = false;
+            obstaculos[i].z -= 0.3f; 
+            if (obstaculos[i].z < -15.0f) obstaculos[i].ativo = false;
+
+            // Colisão Frontal (Obstáculo)
+            if (obstaculos[i].z <= 0.5f && obstaculos[i].z >= -0.5f) {
+                bool bateuX = (playerX > obstaculos[i].x - 1.0f && playerX < obstaculos[i].x + 1.0f);
+                bool bateuY = (playerY < 0.8f); 
+                
+                if (bateuX && bateuY) {
+                    obstaculos[i].ativo = false; 
+                    if (professorZ >= Z_PERIGO) {
+                        gameOver = true; 
+                    } else {
+                        tremorTempo = 15; 
+                        professorZ += 3.0f; 
+                    }
+                }
             }
         } else {
-            // Chance de gerar um novo obstáculo (3% a cada frame)
+            // Chance de gerar Obstáculo (3% por frame)
             if (rand() % 100 < 3) {
                 obstaculos[i].ativo = true;
-                obstaculos[i].z = 25.0f; // Nasce perto da câmera 
-                obstaculos[i].y = 0.5f;  // Altura no chão
+                obstaculos[i].tipo = OBSTACULO;
+                obstaculos[i].z = 25.0f; 
+                obstaculos[i].y = 0.5f; // Fica no chão
                 
-                // Escolhe aleatoriamente uma das 3 faixas (-2, 0 ou 2)
                 int faixa = rand() % 3;
-                if (faixa == 0) obstaculos[i].x = -2.0f;
-                else if (faixa == 1) obstaculos[i].x = 0.0f;
-                else obstaculos[i].x = 2.0f;
+                obstaculos[i].x = (faixa == 0) ? -2.0f : ((faixa == 1) ? 0.0f : 2.0f);
             }
         }
     }
 
+    // --- LÓGICA DAS PROVAS (Coletáveis) ---
+    for (int i = 0; i < MAX_PROVAS; i++) {
+        if (provas[i].ativo) {
+            provas[i].z -= 0.3f; 
+            if (provas[i].z < -15.0f) provas[i].ativo = false;
+
+            // Coleta da Prova
+            if (provas[i].z <= 0.5f && provas[i].z >= -0.5f) {
+                bool bateuX = (playerX > provas[i].x - 1.0f && playerX < provas[i].x + 1.0f);
+                // Não precisa verificar o Y com rigor, basta encostar no eixo X
+                if (bateuX) {
+                    provas[i].ativo = false; 
+                    professorZ -= 2.5f; // Afasta o professor (Recompensa)
+                    if (professorZ < -20.0f) professorZ = -20.0f; 
+                }
+            }
+        } else {
+            // Chance de gerar Prova (Apenas 1% por frame, são mais raras)
+            if (rand() % 100 < 1) {
+                provas[i].ativo = true;
+                provas[i].tipo = PROVA;
+                provas[i].z = 25.0f; 
+                provas[i].y = 1.0f; // Flutua um pouco mais alto
+                
+                int faixa = rand() % 3;
+                provas[i].x = (faixa == 0) ? -2.0f : ((faixa == 1) ? 0.0f : 2.0f);
+            }
+        }
+    }
     // Faz o OpenGL renderizar novamente
     glutPostRedisplay();
     glutTimerFunc(16, timer, 0);
