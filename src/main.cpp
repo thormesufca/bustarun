@@ -2,18 +2,38 @@
 #include <iostream>
 #include "../include/obj_loader.h"
 #include "../include/texture_loader.h"
+#include <cstdlib> 
 
 // Tamanho da janela
 int windowWidth = 800;
 int windowHeight = 600;
 bool isFullscreen = false;
 
-GLuint texProfessor; // Variável para armazenar a textura
+// Variáveis de Objetos
 OBJModel estudanteModel;
+
+// Variáveis de Texturas
+GLuint texProfessor; 
 GLuint texPisoUFCA;
 GLuint texParedeUFCA;
 
+// Variáveis do Jogador
+float playerX = 0.0f;   // Posição X
+float playerY = 0.0f;   // Posição Y
+bool isJumping = false; // Se está pulando
+float jumpSpeed = 0.0f; // Força do pulo
+
+// Variáveis de Cenário
 float offsetCenario = 0.0f; // Faz o cenario se mover
+
+struct Obstaculo { 
+    float x, y, z;
+    bool ativo;
+};
+
+const int MAX_OBSTACULOS = 5;           // Qtd max de obstaculos na tela
+Obstaculo obstaculos[MAX_OBSTACULOS];   // Lista de obstaculos
+
 
 void init() {
     // Define a cor do céu
@@ -110,21 +130,6 @@ void desenharCorredores() {
 
 void desenharCena() {
 
-
-
-    
-    /*glDisable(GL_TEXTURE_2D); // Desativa para desenhar cor sólida [Mudar depois para uma textura de piso da ufca]
-    // Material fosco para o asfalto
-    GLfloat mat_chao[] = { 0.2f, 0.2f, 0.2f, 1.0f };
-    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_chao);
-    glMaterialf(GL_FRONT, GL_SHININESS, 0.0f); // Sem brilho
-
-    glBegin(GL_QUADS);
-        glVertex3f(-4.0f, 0.0f,  15.0f);
-        glVertex3f( 4.0f, 0.0f,  15.0f);
-        glVertex3f( 4.0f, 0.0f, -30.0f);
-        glVertex3f(-4.0f, 0.0f, -30.0f);
-    glEnd();*/
     glEnable(GL_TEXTURE_2D); // Reativa as texturas
     
     // Desenha professor
@@ -148,16 +153,15 @@ void desenharCena() {
         // Define um periodo com base no loop do jogo
         float tempo = glutGet(GLUT_ELAPSED_TIME) / 1000.0f; 
         float balancoCorrida = sin(tempo * 15.0f) * 0.1f;
-        glTranslatef(0.0f, 1.0f + balancoCorrida, 0.0f);
-        
+        //glTranslatef(0.0f, 1.0f + balancoCorrida, 0.0f);
+        glTranslatef(playerX, 1.0f + playerY + balancoCorrida, 0.0f);
         
         float inclinacao = cos(tempo * 7.0f) * 5.0f;
         glRotatef(inclinacao, 0.0f, 0.0f, 1.0f); // Gira no eixo Z
-        
         glRotatef(180.0f, 0.0f, 1.0f, 0.0f); // Deixa o boneco de frente para a câmera
 
-        glTranslatef(0.0f, 1.0f, 0.0f);
-        glRotatef(180.0f, 0.0f, 1.0f, 0.0f);
+        //glTranslatef(0.0f, 1.0f, 0.0f);
+        //glRotatef(180.0f, 0.0f, 1.0f, 0.0f);
 
         GLfloat mat_amb[]  = { 0.2f, 0.2f, 0.2f, 1.0f }; // Luz natural do corpo
         GLfloat mat_dif[]  = { 0.1f, 0.3f, 0.8f, 1.0f }; // Roupa azul refletindo
@@ -174,12 +178,22 @@ void desenharCena() {
         estudanteModel.draw(); 
     glPopMatrix();
 
-    // Desenha um obstaculo de teste
-    /*glPushMatrix();
-        glTranslatef(-1.5f, 0.5f, 4.0f); 
-        glColor3f(0.9f, 0.9f, 0.1f);     
-        glutSolidCube(1.0f);             
-    glPopMatrix();*/
+    // Desenha os obstáculos
+    GLfloat mat_obs[] = { 0.9f, 0.8f, 0.1f, 1.0f };
+    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_obs);
+    glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
+
+    for (int i = 0; i < MAX_OBSTACULOS; i++) {
+        if (obstaculos[i].ativo) {
+            glPushMatrix();
+                // Usa a posição exata da struct
+                glTranslatef(obstaculos[i].x, obstaculos[i].y, obstaculos[i].z);
+                
+                // Por enquanto usaremos um cubo 
+                glutSolidCube(1.0f); 
+            glPopMatrix();
+        }
+    }
 }
 
 // Função principal de renderização
@@ -210,11 +224,10 @@ void display() {
 
 // Função para capturar teclas de movimentação
 void keyboard(unsigned char key, int x, int y) {
-    if (key == 27) { // Esc fecha o jogo
-        exit(0);     
-    }
+    if (key == 27) exit(0); // Fechar o jogo no ESC
 
-    if (key == 'f' || key == 'F') { // Colocar e tirar da tela cheia
+    // Colocar e tirar da tela cheia
+    if (key == 'f' || key == 'F') { 
         if (isFullscreen) {
             glutReshapeWindow(800, 600);
             glutPositionWindow(100, 100);
@@ -225,28 +238,78 @@ void keyboard(unsigned char key, int x, int y) {
         }
     }
 
-    // Lógica de movimentação entrará aqui
+    // Movimentação do Jogador
+    if ((key == 'a' || key == 'A') && playerX > -2.0f) {
+        playerX -= 2.0f;
+    }
+    if ((key == 'd' || key == 'D') && playerX < 2.0f) {
+        playerX += 2.0f;
+    }
+    // Pulo
+    if ((key == 'w' || key == 'W' || key == ' ') && !isJumping) {
+        isJumping = true;
+        jumpSpeed = 0.25f; // "Força" inicial do pulo
+    }
 }
 
 // Função para capturar teclas especiais 
 void specialKeys(int key, int x, int y) {
-    // Lógica das setas do teclado entrará aqui
+    // Movimentação com as setas do teclado 
+    if (key == GLUT_KEY_LEFT && playerX > -2.0f) playerX -= 2.0f;
+    if (key == GLUT_KEY_RIGHT && playerX < 2.0f) playerX += 2.0f;
+    if (key == GLUT_KEY_UP && !isJumping) {
+        isJumping = true;
+        jumpSpeed = 0.25f;
+    }
 }
 
 // Loop Principal
 void timer(int value) {
     // Incrementa a velocidade do cenário (Ajuste o 0.05f para mais rápido ou mais devagar)
     offsetCenario += 0.05f; 
-    
     // Reseta o offset para não estourar o limite de memória do float
-    if (offsetCenario > 10.0f) {
-        offsetCenario -= 10.0f;
+    if (offsetCenario > 10.0f) offsetCenario -= 10.0f;
+
+    // Física do pulo
+    if (isJumping) {
+        playerY += jumpSpeed;  // Sobe o jogador
+        jumpSpeed -= 0.015f;   // Aplica gravidade reduzindo a velocidade
+        
+        // Verifica se tocou no chão
+        if (playerY <= 0.0f) {
+            playerY = 0.0f;
+            isJumping = false; // Termina o pulo
+        }
     }
 
+    // Fisica dos objetos
+    for (int i = 0; i < MAX_OBSTACULOS; i++) {
+        if (obstaculos[i].ativo) {
+            // Translação Invertida vai em direção ao professor
+            obstaculos[i].z -= 0.35f; 
+            
+            // Se passou do cenário (Z < -15), desativa para não pesar
+            if (obstaculos[i].z < -15.0f) {
+                obstaculos[i].ativo = false;
+            }
+        } else {
+            // Chance de gerar um novo obstáculo (3% a cada frame)
+            if (rand() % 100 < 3) {
+                obstaculos[i].ativo = true;
+                obstaculos[i].z = 25.0f; // Nasce perto da câmera 
+                obstaculos[i].y = 0.5f;  // Altura no chão
+                
+                // Escolhe aleatoriamente uma das 3 faixas (-2, 0 ou 2)
+                int faixa = rand() % 3;
+                if (faixa == 0) obstaculos[i].x = -2.0f;
+                else if (faixa == 1) obstaculos[i].x = 0.0f;
+                else obstaculos[i].x = 2.0f;
+            }
+        }
+    }
 
     // Faz o OpenGL renderizar novamente
     glutPostRedisplay();
-
     glutTimerFunc(16, timer, 0);
 }
 
