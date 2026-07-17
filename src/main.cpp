@@ -1,10 +1,15 @@
 #include <GL/glut.h> 
 #include <iostream>
+#include "../include/obj_loader.h"
+#include "../include/texture_loader.h"
 
 // Tamanho da janela
 int windowWidth = 800;
 int windowHeight = 600;
-bool isFullscreen = true;
+bool isFullscreen = false;
+
+GLuint texProfessor; // Variável para armazenar a textura
+OBJModel estudanteModel;
 
 void init() {
     // Define a cor do céu
@@ -12,6 +17,20 @@ void init() {
 
     // Ativa o Z-Buffer 
     glEnable(GL_DEPTH_TEST);
+
+    glEnable(GL_TEXTURE_2D); // Permite usar texturas
+    glEnable(GL_LIGHTING);   // Permite usar materiais
+    glEnable(GL_LIGHT0);     // Ativa a Luz 0
+    
+    // Luz branca para ser o Sol
+    GLfloat luz_pos[] = { 0.0f, 10.0f, 10.0f, 1.0f };
+    glLightfv(GL_LIGHT0, GL_POSITION, luz_pos);
+
+    texProfessor = loadTexture("assets/textures/fig1.png");
+
+    if (!estudanteModel.load("assets/models/estudante.obj")) {
+         std::cerr << "Falha ao carregar o modelo do estudante!" << std::endl;
+    }
 }
 
 // Redesenho da janela e configuração da projeção
@@ -30,52 +49,78 @@ void reshape(int w, int h) {
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
 
-    // Aplica a Projeção Perspetiva (FOV, Aspect Ratio, Near, Far) (Usamos um FOV de 60 graus para parecer o subway surfers)
+    // Aplica a Projeção Perspetiva (FOV, Aspect Ratio, Near, Far)
     gluPerspective(70.0f, aspect, 0.1f, 100.0f);
 }
 
 void desenharCena() {
-    // Desenha um chão
-    glColor3f(0.2f, 0.2f, 0.2f);
-    glBegin(GL_QUADS);
-    glVertex3f(-4.0f, 0.0f,  15.0f);
-    glVertex3f( 4.0f, 0.0f,  15.0f);
-    glVertex3f( 4.0f, 0.0f, -30.0f);
-    glVertex3f(-4.0f, 0.0f, -30.0f);
-    glEnd();
+    glDisable(GL_TEXTURE_2D); // Desativa para desenhar cor sólida [Mudar depois para uma textura de piso da ufca]
+    // Material fosco para o asfalto
+    GLfloat mat_chao[] = { 0.2f, 0.2f, 0.2f, 1.0f };
+    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_chao);
+    glMaterialf(GL_FRONT, GL_SHININESS, 0.0f); // Sem brilho
 
-    // Desenha um placeholder do perseguidor
+    glBegin(GL_QUADS);
+        glVertex3f(-4.0f, 0.0f,  15.0f);
+        glVertex3f( 4.0f, 0.0f,  15.0f);
+        glVertex3f( 4.0f, 0.0f, -30.0f);
+        glVertex3f(-4.0f, 0.0f, -30.0f);
+    glEnd();
+    glEnable(GL_TEXTURE_2D); // Reativa as texturas
+    
+    // Desenha professor
+    glBindTexture(GL_TEXTURE_2D, texProfessor);
+    GLfloat mat_prof[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_prof);
+
     glPushMatrix();
-        glTranslatef(0.0f, 2.5f, -12.0f); 
-        glColor3f(0.8f, 0.1f, 0.1f);      
-        glScalef(3.0f, 5.0f, 0.5f);    
-        glutSolidCube(1.0f);
+        glTranslatef(0.0f, 5.0f, -12.0f); 
+        glBegin(GL_QUADS);
+            glTexCoord2f(0.0f, 0.0f); glVertex3f(-5.0f, -5.0f, 0.0f);
+            glTexCoord2f(1.0f, 0.0f); glVertex3f( 5.0f, -5.0f, 0.0f);
+            glTexCoord2f(1.0f, 1.0f); glVertex3f( 5.0f,  5.0f, 0.0f);
+            glTexCoord2f(0.0f, 1.0f); glVertex3f(-5.0f,  5.0f, 0.0f);
+        glEnd();
     glPopMatrix();
 
     // Desenha o jogador
+    glDisable(GL_TEXTURE_2D); 
     glPushMatrix();
-        glTranslatef(0.0f, 1.0f, 0.0f); 
-        glColor3f(0.1f, 0.3f, 0.8f);     
-        glutSolidSphere(0.8f, 20, 20);   
+        // Define um periodo com base no loop do jogo
+        float tempo = glutGet(GLUT_ELAPSED_TIME) / 1000.0f; 
+        float balancoCorrida = sin(tempo * 15.0f) * 0.1f;
+        glTranslatef(0.0f, 1.0f + balancoCorrida, 0.0f);
+        
+        
+        float inclinacao = cos(tempo * 7.0f) * 5.0f;
+        glRotatef(inclinacao, 0.0f, 0.0f, 1.0f); // Gira no eixo Z
+        
+        glRotatef(180.0f, 0.0f, 1.0f, 0.0f); // Deixa o boneco de frente para a câmera
+
+        glTranslatef(0.0f, 1.0f, 0.0f);
+        glRotatef(180.0f, 0.0f, 1.0f, 0.0f);
+
+        GLfloat mat_amb[]  = { 0.2f, 0.2f, 0.2f, 1.0f }; // Luz natural do corpo
+        GLfloat mat_dif[]  = { 0.1f, 0.3f, 0.8f, 1.0f }; // Roupa azul refletindo
+        GLfloat mat_spec[] = { 1.0f, 1.0f, 1.0f, 1.0f }; // Brilho de suor/plástico
+        GLfloat mat_shin[] = { 50.0f };                  // reflexão especular
+
+        glMaterialfv(GL_FRONT, GL_AMBIENT, mat_amb);
+        glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_dif);
+        glMaterialfv(GL_FRONT, GL_SPECULAR, mat_spec);
+        glMaterialfv(GL_FRONT, GL_SHININESS, mat_shin);
+
+        // Para quando tiver com o obj:
+        //drawOBJ("assets/models/estudante.obj"); 
+        estudanteModel.draw(); 
     glPopMatrix();
 
     // Desenha um obstaculo de teste
-    glPushMatrix();
+    /*glPushMatrix();
         glTranslatef(-1.5f, 0.5f, 4.0f); 
         glColor3f(0.9f, 0.9f, 0.1f);     
         glutSolidCube(1.0f);             
-    glPopMatrix();
-}
-
-// Função para desenhar um chão temporário
-void desenharChao() {
-    glColor3f(0.3f, 0.3f, 0.3f);
-    glBegin(GL_QUADS);
-        glVertex3f(-10.0f, 0.0f,  10.0f);
-        glVertex3f( 10.0f, 0.0f,  10.0f);
-        glVertex3f( 10.0f, 0.0f, -200.0f);
-        glVertex3f(-10.0f, 0.0f, -200.0f);
-    glEnd();
+    glPopMatrix();*/
 }
 
 // Função principal de renderização
@@ -143,7 +188,7 @@ int main(int argc, char** argv) {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
 
     glutInitWindowSize(windowWidth, windowHeight);
-    glutInitWindowPosition(100, 100); // Posição inicial da janela
+    //glutInitWindowPosition(100, 100); // Posição inicial da janela
     glutCreateWindow("UFCA Runner");
     
     if (isFullscreen) {
