@@ -28,13 +28,16 @@ GLuint texParedeUFCA;
 // Variáveis do Jogador
 float playerX = 0.0f;   // Posição X
 float playerY = 0.0f;   // Posição Y
+const float playerZ = -7.5f; // Posição Z
+float targetPlayerX = 0.0f; // Vai ser usada para garantir a colisão
+float lastPlayerX = 0.0f;   // Ultima posição do player antes de colidir
 bool isJumping = false; // Se está pulando
 float jumpSpeed = 0.0f; // Força do pulo
 
 // Variáveis do Professor
 float professorZ = -15.0f;      // Localização do Professor
 float profSpeed = 0.001f;        // Velocidade dele
-const float Z_PERIGO = -5.0f;   // Distância para erro = gameover
+const float Z_PERIGO = playerZ;   // Distância para erro = gameover
 const float Z_GAMEOVER = -3.0f; // Distância para gameover
 
 // Variáveis de Cenário
@@ -202,7 +205,7 @@ void desenharCena() {
         // Desenhar Sombra
         glPushMatrix();
             // Acompanha a posição X do jogador
-            glTranslatef(playerX, 0.01f, -7.5f); 
+            glTranslatef(playerX, 0.01f, playerZ); 
             glRotatef(inclinacao, 0.0f, 0.0f, 1.0f); // Animacao
             
             // Quanto mais alto o jogador pula a sombra muda
@@ -219,7 +222,7 @@ void desenharCena() {
         glPopMatrix();
 
         // Desenhar Jogador
-        glTranslatef(playerX, 0.0f + playerY + balancoCorrida, -7.5f);
+        glTranslatef(playerX, 0.0f + playerY + balancoCorrida, playerZ);
         glRotatef(inclinacao, 0.0f, 0.0f, 1.0f); 
 
         GLfloat mat_amb[]  = { 0.2f, 0.2f, 0.2f, 1.0f }; // Luz natural do corpo
@@ -374,6 +377,7 @@ void keyboard(unsigned char key, int x, int y) {
             professorZ = -15.0f; 
             playerX = 0.0f;      
             playerY = 0.0f;
+            targetPlayerX = 0.0f;
             isJumping = false;
             score = 0;               // Zera a pontuação
             speedMultiplier = 1.0f;  // Zera a dificuldade
@@ -382,28 +386,33 @@ void keyboard(unsigned char key, int x, int y) {
         }
     }
 
-    // Movimentação do Jogador
-    if ((key == 'a' || key == 'A') && playerX > -2.0f) {
-        playerX -= 2.0f;
-    }
-    if ((key == 'd' || key == 'D') && playerX < 2.0f) {
-        playerX += 2.0f;
-    }
-    // Pulo
-    if ((key == 'w' || key == 'W' || key == ' ') && !isJumping) {
-        isJumping = true;
-        jumpSpeed = 0.25f; // "Força" inicial do pulo
+    if(!gameOver && tremorTempo == 0){
+        if ((key == 'a' || key == 'A') && targetPlayerX > -2.0f) {
+            lastPlayerX = targetPlayerX;
+            targetPlayerX -= 2.0f;
+        }
+
+        if ((key == 'd' || key == 'D') && targetPlayerX < 2.0f) {
+            lastPlayerX = targetPlayerX;
+            targetPlayerX += 2.0f;
+        }
+            if ((key == 'w' || key == 'W' || key == ' ') && !isJumping) {
+            isJumping = true;
+            jumpSpeed = 0.25f;
+        }
     }
 }
 
 // Função para capturar teclas especiais 
 void specialKeys(int key, int x, int y) {
     // Movimentação com as setas do teclado 
-    if (key == GLUT_KEY_LEFT && playerX > -2.0f) playerX -= 2.0f;
-    if (key == GLUT_KEY_RIGHT && playerX < 2.0f) playerX += 2.0f;
-    if (key == GLUT_KEY_UP && !isJumping) {
-        isJumping = true;
-        jumpSpeed = 0.25f;
+    if(!gameOver && tremorTempo == 0){
+        if (key == GLUT_KEY_LEFT && targetPlayerX > -2.0f) targetPlayerX -= 2.0f;
+        if (key == GLUT_KEY_RIGHT && targetPlayerX < 2.0f) targetPlayerX += 2.0f;
+        if (key == GLUT_KEY_UP && !isJumping) {
+            isJumping = true;
+            jumpSpeed = 0.25f;
+        }
     }
 }
 
@@ -428,6 +437,12 @@ void timer(int value) {
     // Multiplica a velocidade de todos os movimentos
     offsetCenario += (0.05f * speedMultiplier); 
     if (offsetCenario > 10.0f) offsetCenario -= 10.0f;
+
+    // Movimento melhorado do jogador
+    playerX += (targetPlayerX - playerX) * 0.15f;
+    if(std::abs(targetPlayerX - playerX) <=0.015f){
+        lastPlayerX = targetPlayerX;
+    }
 
     // Física do pulo
     if (isJumping) {
@@ -494,8 +509,10 @@ void timer(int value) {
             obstaculos[i].z -= (0.3f * speedMultiplier); 
             if (obstaculos[i].z < -15.0f) obstaculos[i].ativo = false;
 
-            
-            if (obstaculos[i].z <= 0.5f && obstaculos[i].z >= -0.5f) {
+            // Um cubo de tamanho 1.0 engloba -0.5 a +0.5 a partir do seu centro
+            if (obstaculos[i].z <= (playerZ + 0.5f) && obstaculos[i].z >= (playerZ - 0.5f)) {
+                
+                //Checa se o corpo do jogador está cruzando a largura do cubo
                 bool bateuX = (std::abs(playerX - obstaculos[i].x) < 0.8f);
                 bool bateuY = (playerY < 0.8f); 
                 
@@ -504,6 +521,7 @@ void timer(int value) {
                     if (professorZ >= Z_PERIGO) {
                         gameOver = true; 
                     } else {
+                        targetPlayerX = lastPlayerX;
                         tremorTempo = 15; 
                         professorZ += 3.0f; 
                     }
@@ -517,7 +535,7 @@ void timer(int value) {
             provas[i].z -= (0.3f * speedMultiplier); 
             if (provas[i].z < -15.0f) provas[i].ativo = false;
 
-            if (provas[i].z <= 1.0f && provas[i].z >= -1.0f) {
+            if (provas[i].z <= (playerZ + 1.5f) && provas[i].z >= (playerZ - 1.5f)) {
                 bool pegouX = (std::abs(playerX - provas[i].x) < 0.8f);
                 bool pegouY = (playerY < 1.8f);
                 
