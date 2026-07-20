@@ -5,20 +5,24 @@
 #include "../include/texture_loader.h"
 #include <cstdlib> 
 #include <cmath>
+#include <windows.h>
+#include <mmsystem.h>
 
 // Tamanho da janela
 int windowWidth = 800;
 int windowHeight = 600;
 bool isFullscreen = true;
 
-// Variáveis de Objetos
-OBJModel estudanteModel;
-
 // Variáveis do jogo
 bool gameOver = false;
 int score = 0;
 float speedMultiplier = 1.0f;
 int spawnCooldown = 0;
+
+// Variáveis de Objetos
+OBJModel estudanteModel;
+OBJModel obstaculoModel;
+OBJModel provaModel;
 
 // Variáveis de Texturas
 GLuint texProfessor; 
@@ -112,6 +116,15 @@ void init() {
     if (!estudanteModel.load("assets/models/estudante.obj")) {
          std::cerr << "Falha ao carregar o modelo do estudante!" << std::endl;
     }
+    // Descomente quando tiver os modelos
+    /*
+    if (!obstaculoModel.load("assets/models/cadeira.obj")) {
+         std::cerr << "Falha ao carregar o obstaculo!" << std::endl;
+    }
+    if (!provaModel.load("assets/models/prova.obj")) {
+         std::cerr << "Falha ao carregar a prova!" << std::endl;
+    }
+    */
 }
 
 // Redesenho da janela e configuração da projeção
@@ -248,7 +261,8 @@ void desenharCena() {
                 glTranslatef(obstaculos[i].x, obstaculos[i].y, obstaculos[i].z);
                 GLfloat mat_obs[] = { 0.8f, 0.1f, 0.1f, 1.0f }; // Vermelho
                 glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_obs);
-                glutSolidCube(1.0f); 
+                glutSolidCube(1.0f); // Comente essa linha quando tiver o modelo
+                // obstaculoModel.draw(); // Descomente esta linha
             glPopMatrix();
         }
     }
@@ -264,7 +278,8 @@ void desenharCena() {
                 // Faz a prova girar
                 float tempoAnim = glutGet(GLUT_ELAPSED_TIME) / 10.0f;
                 glRotatef(tempoAnim, 0.0f, 1.0f, 0.0f);
-                glutSolidCube(0.8f); 
+                glutSolidCube(0.8f);  // Comente essa linha quando tiver o modelo
+                // provaModel.draw(); // Descomente esta linha
             glPopMatrix();
         }
     }
@@ -386,7 +401,7 @@ void keyboard(unsigned char key, int x, int y) {
         }
     }
 
-    if(!gameOver && tremorTempo == 0){
+    if(!gameOver && tremorTempo <= 5){
         if ((key == 'a' || key == 'A') && targetPlayerX > -2.0f) {
             lastPlayerX = targetPlayerX;
             targetPlayerX -= 2.0f;
@@ -406,7 +421,7 @@ void keyboard(unsigned char key, int x, int y) {
 // Função para capturar teclas especiais 
 void specialKeys(int key, int x, int y) {
     // Movimentação com as setas do teclado 
-    if(!gameOver && tremorTempo == 0){
+    if(!gameOver && tremorTempo <= 5){
         if (key == GLUT_KEY_LEFT && targetPlayerX > -2.0f) targetPlayerX -= 2.0f;
         if (key == GLUT_KEY_RIGHT && targetPlayerX < 2.0f) targetPlayerX += 2.0f;
         if (key == GLUT_KEY_UP && !isJumping) {
@@ -518,6 +533,7 @@ void timer(int value) {
                 
                 if (bateuX && bateuY) {
                     obstaculos[i].ativo = false; 
+                    PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC); // Toca o som de batida
                     if (professorZ >= Z_PERIGO) {
                         gameOver = true; 
                     } else {
@@ -543,6 +559,7 @@ void timer(int value) {
                     provas[i].ativo = false; 
                     professorZ -= 2.5f; 
                     if (professorZ < -20.0f) professorZ = -20.0f; 
+                    PlaySound(TEXT("assets/sounds/coleta.wav"), NULL, SND_ASYNC);
                 }
             }
         } 
