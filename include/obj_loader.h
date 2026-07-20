@@ -34,9 +34,23 @@ private:
     std::vector<Face> faces;
     bool hasTexCoords;
     bool hasNormals;
+    Vector3 boundsMin;
+    Vector3 boundsMax;
 
 public:
-    OBJModel() : hasTexCoords(false), hasNormals(false) {}
+    OBJModel() : hasTexCoords(false), hasNormals(false),
+                 boundsMin{0.0f, 0.0f, 0.0f}, boundsMax{0.0f, 0.0f, 0.0f} {}
+
+    // Centro da bounding box do modelo no espaço local (útil para
+    // alinhar cálculos no mundo, como colisão, com a malha visível,
+    // já que o .obj pode não ter a origem centralizada)
+    Vector3 getCenter() const {
+        return {
+            (boundsMin.x + boundsMax.x) / 2.0f,
+            (boundsMin.y + boundsMax.y) / 2.0f,
+            (boundsMin.z + boundsMax.z) / 2.0f
+        };
+    }
 
     // Carrega o arquivo .obj
     bool load(const std::string& filename) {
@@ -63,6 +77,18 @@ public:
                 Vector3 v;
                 ss >> v.x >> v.y >> v.z;
                 vertices.push_back(v);
+
+                if (vertices.size() == 1) {
+                    boundsMin = v;
+                    boundsMax = v;
+                } else {
+                    if (v.x < boundsMin.x) boundsMin.x = v.x;
+                    if (v.y < boundsMin.y) boundsMin.y = v.y;
+                    if (v.z < boundsMin.z) boundsMin.z = v.z;
+                    if (v.x > boundsMax.x) boundsMax.x = v.x;
+                    if (v.y > boundsMax.y) boundsMax.y = v.y;
+                    if (v.z > boundsMax.z) boundsMax.z = v.z;
+                }
             } else if (type == "vt") {
                 Vector2 vt;
                 ss >> vt.u >> vt.v;
