@@ -21,6 +21,6 @@ Neste jogo, o jogador é um estudante correndo pelos corredores da universidade,
 - [ ] **Texturas Finais da UFCA** Trocar as texturas de teste provisórias por fotos reais que lembrem os blocos da UFCA.
 - [x] **Sombras Projetadas** Criar a projeção da sombra no chão achatando os vértices do jogador e dos objetos com a cor cinza escura, sem iluminação
 - [x] **HUD** Adicionar texto 2D na tela para exibir o tempo sobrevivido e uma mensagem de "GAME OVER - Pressione R para reiniciar".
-- [ ] **Sound Effects** Adicionar música e sons de coleta ao jogo
+- [x] **Sound Effects** Adicionar música e sons de coleta ao jogo
 - [x] **Progressão de Dificuldade** Aumentar lentamente as variáveis e a velocidade que os objetos caem no eixo Z conforme o tempo de jogo passa, para o jogo ficar frenético.
 - [ ] **Menu Inicial** Uma preta simples aguardando o usuário apertar ENTER para começar o jogo, mostrar créditos e selecionar skins.

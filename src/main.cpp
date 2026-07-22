@@ -19,6 +19,27 @@ int score = 0;
 float speedMultiplier = 1.0f;
 int spawnCooldown = 0;
 
+enum GameState { MENU_INICIAL, JOGANDO, GAMEOVER_TELA, CREDITOS, SKINS };
+GameState currentState = MENU_INICIAL;
+
+int menuSelecionado = 0; // 0: Jogar, 1: Skins, 2: Creditos, 3: Sair
+const int MAX_MENU_OPCOES = 4;
+
+int skinSelecionada = 0;
+const int MAX_SKINS = 3;
+const char* nomesSkins[MAX_SKINS] = {"Luis", "Tony", "Bustamante"};
+
+// Nomes para os créditos
+const char* creditosNomes[] = {
+    "ARTHUR LOBO FEITOSA DE OLIVEIRA",
+    "GUILHERME VIANA BATISTA",
+    "LUÍS FAGNER DE CARVALHO SILVA ",
+    "RUAN PABLO FURTADO OLIVEIRA",
+    "THORMES FILGUEIRA LEITE PEREIRA ",
+    "TONY ESAU DE OLIVEIRA",
+    "Agradecimento a professora Luana!"};
+const int numCreditos = 7;
+
 // Variáveis de Objetos
 OBJModel estudanteModel;
 OBJModel obstaculoModel;
@@ -28,6 +49,8 @@ OBJModel provaModel;
 GLuint texProfessor;
 GLuint texPisoUFCA;
 GLuint texParedeUFCA;
+GLuint texMenu;
+GLuint texSkins[MAX_SKINS]; // Array para guardar as skins carregadas
 
 // Variáveis do Jogador
 float playerX = 0.0f;        // Posição X
@@ -68,6 +91,7 @@ struct Objeto
 const int MAX_OBSTACULOS = 5;      // Qtd max de obstaculos na tela
 Objeto obstaculos[MAX_OBSTACULOS]; // Lista de obstaculos
 
+
 const int MAX_PROVAS = 2;
 Objeto provas[MAX_PROVAS];
 
@@ -75,8 +99,32 @@ Objeto provas[MAX_PROVAS];
 int tremorTempo = 0;            // Quantos frames a tela vai tremer
 float intensidadeTremor = 0.3f; // O quão forte a tela balança
 
-void init()
-{
+// Função para gerar textos
+void texto2D(float x, float y, void* fonte, const char* texto, float r, float g, float b) {
+    glColor3f(r, g, b);
+    glRasterPos2f(x, y);
+    while (*texto) {
+        glutBitmapCharacter(fonte, *texto);
+        texto++;
+    }
+}
+
+// Função de reset
+void resetarJogo() {
+    gameOver = false;
+    professorZ = -15.0f; 
+    playerX = 0.0f;
+    targetPlayerX = 0.0f;      
+    playerY = 0.0f;
+    isJumping = false;
+    score = 0;               
+    speedMultiplier = 1.0f;  
+    spawnCooldown = 0; 
+    for (int i = 0; i < MAX_OBSTACULOS; i++) obstaculos[i].ativo = false;
+    for (int i = 0; i < MAX_PROVAS; i++) provas[i].ativo = false;
+}
+
+void init() {
     // Define a cor do céu
     glClearColor(0.85f, 0.55f, 0.4f, 1.0f);
 
@@ -118,7 +166,9 @@ void init()
     glLightf(GL_LIGHT2, GL_SPOT_EXPONENT, 5.0f);
     glLightfv(GL_LIGHT2, GL_DIFFUSE, spot_difusa);
 
-    texProfessor = loadTexture("assets/textures/fig1.png");
+    // Carregamento de Texturas
+    texMenu = loadTexture("assets/textures/background.png");
+    texProfessor = loadTexture("assets/textures/Luis.png");
     texPisoUFCA = loadTexture("assets/textures/fig2.png");
     texParedeUFCA = loadTexture("assets/textures/fig3.png");
 
@@ -130,6 +180,12 @@ void init()
     {
         PLAYER_COLLISION_Z = playerZ + estudanteModel.getCenter().z;
     }
+        // Skins
+    texSkins[0] = loadTexture("assets/textures/Luis.png");
+    texSkins[1] = loadTexture("assets/textures/Tony.png");
+    texSkins[2] = loadTexture("assets/textures/Bustamante.png");
+    texProfessor = texSkins[0]; // Skin Default
+
     // Descomente quando tiver os modelos
     /*
     if (!obstaculoModel.load("assets/models/cadeira.obj")) {
@@ -324,8 +380,10 @@ void desenharCena()
     }
 }
 
-void desenharHUD()
-{
+
+
+void desenharHUD() {
+    
     // Salva matrizes atuais e muda para projeção ortogonal
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
@@ -340,27 +398,71 @@ void desenharHUD()
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_TEXTURE_2D);
+    
+    char buffer[100];
 
-    // Desenha o Score no canto da tela
-    glColor3f(1.0f, 1.0f, 1.0f);
-    std::string scoreTxt = "PONTOS: " + std::to_string(score);
-    glRasterPos2f(20, 30); // Posição (X, Y) na tela
-    for (char &c : scoreTxt)
-    {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+    if(currentState != JOGANDO){
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texMenu);
+        glColor3f(1.0f,1.0f,1.0f);
+        glBegin(GL_QUADS);
+            glTexCoord2f(0.0f, 1.0f); glVertex2f(0, 0);
+            glTexCoord2f(1.0f, 1.0f); glVertex2f(windowWidth, 0);
+            glTexCoord2f(1.0f, 0.0f); glVertex2f(windowWidth, windowHeight); 
+            glTexCoord2f(0.0f, 0.0f); glVertex2f(0, windowHeight);
+        glEnd();
+        glDisable(GL_TEXTURE_2D); 
     }
 
-    // Desenha mensagem de Game Over
-    if (gameOver && professorZ > -2.0f)
-    {
-        glColor3f(1.0f, 0.2f, 0.2f); // Vermelho
-        std::string goTxt = "GAME OVER! \n Pressione 'R' para reiniciar.";
-        // Tenta centralizar mais ou menos
-        glRasterPos2f(windowWidth / 2.0f - 150.0f, windowHeight / 2.0f);
-        for (char &c : goTxt)
-        {
-            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+    if (currentState == MENU_INICIAL) {
+        
+
+        texto2D(windowWidth/2 - 100, 150, GLUT_BITMAP_TIMES_ROMAN_24, "UFCA RUNNER", 1.0f, 1.0f, 1.0f);
+        
+        texto2D(windowWidth/2 - 50, 300, GLUT_BITMAP_HELVETICA_18, menuSelecionado == 0 ? "> Jogar" : "  Jogar", 1.0f, 1.0f, 0.0f);
+        texto2D(windowWidth/2 - 50, 340, GLUT_BITMAP_HELVETICA_18, menuSelecionado == 1 ? "> Skins do Professor" : "  Skins do Professor", 1.0f, 1.0f, 0.0f);
+        texto2D(windowWidth/2 - 50, 380, GLUT_BITMAP_HELVETICA_18, menuSelecionado == 2 ? "> Creditos" : "  Creditos", 1.0f, 1.0f, 0.0f);
+        texto2D(windowWidth/2 - 50, 420, GLUT_BITMAP_HELVETICA_18, menuSelecionado == 3 ? "> Sair" : "  Sair", 1.0f, 1.0f, 0.0f);
+    }
+    else if (currentState == JOGANDO) {
+        // Score maior e no topo
+        sprintf(buffer, "SCORE: %d", score);
+        texto2D(20, 40, GLUT_BITMAP_TIMES_ROMAN_24, buffer, 1.0f, 1.0f, 1.0f);
+    }
+    else if (currentState == GAMEOVER_TELA) {
+        texto2D(windowWidth/2 - 100, windowHeight/2 - 50, GLUT_BITMAP_TIMES_ROMAN_24, "GAME OVER!", 1.0f, 0.0f, 0.0f);
+        texto2D(windowWidth/2 - 180, windowHeight/2 + 20, GLUT_BITMAP_HELVETICA_18, "Pressione [R] para Reiniciar", 1.0f, 1.0f, 1.0f);
+        texto2D(windowWidth/2 - 200, windowHeight/2 + 60, GLUT_BITMAP_HELVETICA_18, "Pressione [ESC] para Menu Principal", 1.0f, 1.0f, 1.0f);
+    }
+    else if (currentState == SKINS) {
+        texto2D(windowWidth/2 - 100, 150, GLUT_BITMAP_TIMES_ROMAN_24, "SELECIONE A SKIN", 1.0f, 1.0f, 1.0f);
+
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texSkins[skinSelecionada]);
+        
+        float imgSize = 250.0f; 
+        float x = windowWidth / 2.0f - imgSize / 2.0f;
+        float y = windowHeight / 2.0f - imgSize / 2.0f; 
+        
+        glBegin(GL_QUADS);
+            glTexCoord2f(0.0f, 1.0f); glVertex2f(x, y);
+            glTexCoord2f(1.0f, 1.0f); glVertex2f(x + imgSize, y);
+            glTexCoord2f(1.0f, 0.0f); glVertex2f(x + imgSize, y + imgSize);
+            glTexCoord2f(0.0f, 0.0f); glVertex2f(x, y + imgSize);
+        glEnd();
+        glDisable(GL_TEXTURE_2D);
+
+        sprintf(buffer, "< %s >", nomesSkins[skinSelecionada]);
+        texto2D(windowWidth/2 - 250, windowHeight/2, GLUT_BITMAP_HELVETICA_18, buffer, 0.0f, 1.0f, 0.0f);
+        texto2D(windowWidth/2 - 250, windowHeight - 50, GLUT_BITMAP_HELVETICA_18, "Pressione [ENTER] para confirmar", 1.0f, 1.0f, 1.0f);
+    }
+    else if (currentState == CREDITOS) {
+        // Aqui o resto da equipe pode renderizar a textura de fundo da UFCA depois
+        texto2D(windowWidth/2 - 60, 100, GLUT_BITMAP_TIMES_ROMAN_24, "CREDITOS", 1.0f, 1.0f, 0.0f);
+        for(int i = 0; i < numCreditos; i++) {
+            texto2D(windowWidth/2 - 100, 200 + (i * 40), GLUT_BITMAP_HELVETICA_18, creditosNomes[i], 1.0f, 1.0f, 1.0f);
         }
+        texto2D(windowWidth/2 - 100, windowHeight - 50, GLUT_BITMAP_HELVETICA_18, "Pressione [ESC] para voltar", 0.5f, 0.5f, 0.5f);
     }
 
     // Restaura o estado para 3D
@@ -412,11 +514,15 @@ void display()
 }
 
 // Função para capturar teclas de movimentação
-void keyboard(unsigned char key, int x, int y)
-{
-    if (key == 27)
-        exit(0); // Fechar o jogo no ESC
-
+void keyboard(unsigned char key, int x, int y) {
+    if (key == 27) {
+        if (currentState == MENU_INICIAL) exit(0); // Fecha o jogo se estiver no MENU
+        else if (currentState == JOGANDO || currentState == GAMEOVER_TELA || currentState == CREDITOS || currentState == SKINS) {
+            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC);
+            currentState = MENU_INICIAL; // Volta ao menu
+            resetarJogo();
+        }
+    }        
     // Colocar e tirar da tela cheia
     if (key == 'f' || key == 'F')
     {
@@ -433,22 +539,42 @@ void keyboard(unsigned char key, int x, int y)
         }
     }
 
-    if (key == 'r' || key == 'R')
-    {
-        if (gameOver)
-        {
-            gameOver = false;
-            professorZ = -15.0f;
-            playerX = 0.0f;
-            playerY = 0.0f;
-            targetPlayerX = 0.0f;
-            isJumping = false;
-            score = 0;              // Zera a pontuação
-            speedMultiplier = 1.0f; // Zera a dificuldade
-            for (int i = 0; i < MAX_OBSTACULOS; i++)
-                obstaculos[i].ativo = false;
-            for (int i = 0; i < MAX_PROVAS; i++)
-                provas[i].ativo = false;
+    if (currentState == MENU_INICIAL) {
+        if (key == 13) { // Tecla ENTER
+            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC); 
+            if (menuSelecionado == 0) {
+                currentState = JOGANDO;
+                resetarJogo();
+            }
+            else if (menuSelecionado == 1) currentState = SKINS;
+            else if (menuSelecionado == 2) currentState = CREDITOS;
+            else if (menuSelecionado == 3) exit(0);
+        }
+    } 
+    else if (currentState == SKINS) {
+        if (key == 13) { // Tecla ENTER 
+            std::string caminhoSkin = "assets/textures/" + std::string(nomesSkins[skinSelecionada]) + ".png";
+            
+            // Recarrega a textura do professor com a nova imagem
+            texProfessor = texSkins[skinSelecionada];
+            
+            // Volta para o menu inicial
+            currentState = MENU_INICIAL; 
+        }
+    }
+    else if (currentState == GAMEOVER_TELA) {
+        if (key == 'r' || key == 'R') {
+            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC); 
+
+            // Reinicia o jogo
+            currentState = JOGANDO;
+            resetarJogo();
+        }
+    }
+
+    if (key == 'r' || key == 'R') {
+        if (gameOver) {
+            resetarJogo();
         }
     }
 
@@ -475,18 +601,37 @@ void keyboard(unsigned char key, int x, int y)
     }
 }
 
-// Função para capturar teclas especiais
-void specialKeys(int key, int x, int y)
-{
-    // Movimentação com as setas do teclado
-    if (!gameOver && tremorTempo <= 5)
-    {
-        if (key == GLUT_KEY_LEFT && targetPlayerX > -2.0f)
-            targetPlayerX -= 2.0f;
-        if (key == GLUT_KEY_RIGHT && targetPlayerX < 2.0f)
-            targetPlayerX += 2.0f;
-        if (key == GLUT_KEY_UP && !isJumping)
-        {
+// Função para capturar teclas especiais 
+void specialKeys(int key, int x, int y) {
+    if (currentState == MENU_INICIAL) {
+        if (key == GLUT_KEY_UP) {
+            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC); 
+            menuSelecionado--;
+            if(menuSelecionado < 0) menuSelecionado = MAX_MENU_OPCOES - 1;
+        }
+        if (key == GLUT_KEY_DOWN) {
+            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC); 
+            menuSelecionado++;
+            if(menuSelecionado >= MAX_MENU_OPCOES) menuSelecionado = 0;
+        }
+    }
+    else if (currentState == SKINS) {
+        if (key == GLUT_KEY_LEFT) {
+            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC); 
+            skinSelecionada--;
+            if(skinSelecionada < 0) skinSelecionada = MAX_SKINS - 1;
+        }
+        if (key == GLUT_KEY_RIGHT) {
+            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC); 
+            skinSelecionada++;
+            if(skinSelecionada >= MAX_SKINS) skinSelecionada = 0;
+        }
+    }
+    // Movimentação com as setas do teclado 
+    if(!gameOver && tremorTempo <= 5){
+        if (key == GLUT_KEY_LEFT && targetPlayerX > -2.0f) targetPlayerX -= 2.0f;
+        if (key == GLUT_KEY_RIGHT && targetPlayerX < 2.0f) targetPlayerX += 2.0f;
+        if (key == GLUT_KEY_UP && !isJumping) {
             isJumping = true;
             jumpSpeed = 0.25f;
         }
@@ -494,169 +639,121 @@ void specialKeys(int key, int x, int y)
 }
 
 // Loop Principal
-void timer(int value)
-{
+void timer(int value) {
+    if (currentState == JOGANDO || currentState == GAMEOVER_TELA) {
+        if (gameOver) {
+            tremorTempo = 0;
+            if (professorZ < 6.0f) {
+                professorZ += 0.7f; 
+            }
+        } else {
+            // Incrementa a velocidade do cenário 
+            score += (int)(10 * speedMultiplier); // Ganha pontos
+            speedMultiplier += 0.001f;      
 
-    if (gameOver)
-    {
-        tremorTempo = 0;
-        if (professorZ < 6.0f)
-        {
-            professorZ += 0.7f;
-        }
-        glutPostRedisplay();
-        glutTimerFunc(16, timer, 0);
-        return;
-    }
+            offsetCenario += (0.05f * speedMultiplier); 
+            if (offsetCenario > 10.0f) offsetCenario -= 10.0f;
 
-    // Incrementa a velocidade do cenário
-    score += 1;                 // Ganha pontos
-    speedMultiplier += 0.0002f; // O jogo vai ficando mais rápido
+            playerX += (targetPlayerX - playerX) * 0.15f;
+            if(std::abs(targetPlayerX - playerX) <=0.015f){
+                lastPlayerX = targetPlayerX;
+            }
 
-    // Multiplica a velocidade de todos os movimentos
-    offsetCenario += (0.05f * speedMultiplier);
-    if (offsetCenario > 10.0f)
-        offsetCenario -= 10.0f;
-
-    // Movimento melhorado do jogador
-    playerX += (targetPlayerX - playerX) * 0.15f;
-    if (std::abs(targetPlayerX - playerX) <= 0.015f)
-    {
-        lastPlayerX = targetPlayerX;
-    }
-
-    // Física do pulo
-    if (isJumping)
-    {
-        playerY += jumpSpeed; // Sobe o jogador
-        jumpSpeed -= 0.015f;  // Aplica gravidade reduzindo a velocidade
-
-        // Verifica se tocou no chão
-        if (playerY <= 0.0f)
-        {
-            playerY = 0.0f;
-            isJumping = false; // Termina o pulo
-        }
-    }
-
-    if (professorZ < Z_GAMEOVER)
-    {
-        professorZ += profSpeed;
-    }
-    else
-    {
-        gameOver = true;
-    }
-
-    if (tremorTempo > 0)
-        tremorTempo--;
-
-    // Spawn de objetos
-    if (spawnCooldown > 0)
-    {
-        spawnCooldown--;
-    }
-    else
-    {
-        // Se a recarga acabou gera algo
-        int chance = rand() % 100;
-
-        if (chance < 80)
-        { // 80% de chance de ser Obstáculo
-            for (int i = 0; i < MAX_OBSTACULOS; i++)
-            {
-                if (!obstaculos[i].ativo)
-                {
-                    obstaculos[i].ativo = true;
-                    obstaculos[i].tipo = OBSTACULO;
-                    obstaculos[i].z = 25.0f;
-                    obstaculos[i].y = 0.5f;
-                    int faixa = rand() % 3;
-                    obstaculos[i].x = (faixa == 0) ? -2.0f : ((faixa == 1) ? 0.0f : 2.0f);
-
-                    // Define o tempo mínimo até a próxima geração
-                    spawnCooldown = 10 + rand() % 30;
-                    break;
+            if (isJumping) {
+                playerY += jumpSpeed;  
+                jumpSpeed -= 0.015f;   
+                
+                if (playerY <= 0.0f) {
+                    playerY = 0.0f;
+                    isJumping = false; 
                 }
             }
-        }
-        else
-        { // 20% de chance de ser Prova
-            for (int i = 0; i < MAX_PROVAS; i++)
-            {
-                if (!provas[i].ativo)
-                {
-                    provas[i].ativo = true;
-                    provas[i].tipo = PROVA;
-                    provas[i].z = 25.0f;
-                    provas[i].y = 1.0f;
-                    int faixa = rand() % 3;
-                    provas[i].x = (faixa == 0) ? -2.0f : ((faixa == 1) ? 0.0f : 2.0f);
 
-                    spawnCooldown = 20 + rand() % 30;
-                    break;
-                }
+            if (professorZ < Z_GAMEOVER) {
+                professorZ += profSpeed; 
+            } else {
+                gameOver = true; 
+                currentState = GAMEOVER_TELA; // NOVO: Força o estado pra garantir
             }
-        }
-    }
 
-    // Colisões
-    for (int i = 0; i < MAX_OBSTACULOS; i++)
-    {
-        if (obstaculos[i].ativo)
-        {
-            obstaculos[i].z -= (0.3f * speedMultiplier);
-            if (obstaculos[i].z < -15.0f)
-                obstaculos[i].ativo = false;
+            if (tremorTempo > 0) tremorTempo--;
 
-            // Um cubo de tamanho 1.0 engloba -0.5 a +0.5 a partir do seu centro.
-            // A janela é centrada em PLAYER_COLLISION_Z (posição real do mesh, não playerZ puro).
-            if (obstaculos[i].z <= PLAYER_COLLISION_Z + 0.5f && obstaculos[i].z >= PLAYER_COLLISION_Z - 0.5f)
-            {
-                // Checa se o corpo do jogador está cruzando a largura do cubo
-                bool bateuX = (std::abs(playerX - obstaculos[i].x) < 0.8f);
-                bool bateuY = (playerY < 0.8f);
-
-                if (bateuX && bateuY)
-                {
-                    obstaculos[i].ativo = false;
-                    PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC); // Toca o som de batida
-                    if (professorZ >= Z_PERIGO)
-                    {
-                        gameOver = true;
+            if (spawnCooldown > 0) {
+                spawnCooldown--; 
+            } else {
+                int chance = rand() % 100;
+                if (chance < 80) { 
+                    for (int i = 0; i < MAX_OBSTACULOS; i++) {
+                        if (!obstaculos[i].ativo) {
+                            obstaculos[i].ativo = true;
+                            obstaculos[i].tipo = OBSTACULO;
+                            obstaculos[i].z = 25.0f; 
+                            obstaculos[i].y = 0.5f; 
+                            int faixa = rand() % 3;
+                            obstaculos[i].x = (faixa == 0) ? -2.0f : ((faixa == 1) ? 0.0f : 2.0f);
+                            spawnCooldown = 10 + rand() % 30; 
+                            break;
+                        }
                     }
-                    else
-                    {
-                        targetPlayerX = lastPlayerX; // Colisão lateral: volta pra pista anterior
-                        tremorTempo = 15;
-                        professorZ += 3.0f;
+                } else { 
+                    for (int i = 0; i < MAX_PROVAS; i++) {
+                        if (!provas[i].ativo) {
+                            provas[i].ativo = true;
+                            provas[i].tipo = PROVA;
+                            provas[i].z = 25.0f; 
+                            provas[i].y = 1.0f; 
+                            int faixa = rand() % 3;
+                            provas[i].x = (faixa == 0) ? -2.0f : ((faixa == 1) ? 0.0f : 2.0f);
+                            spawnCooldown = 20 + rand() % 30; 
+                            break;
+                        }
                     }
                 }
             }
-        }
-    }
 
-    for (int i = 0; i < MAX_PROVAS; i++)
-    {
-        if (provas[i].ativo)
-        {
-            provas[i].z -= (0.3f * speedMultiplier);
-            if (provas[i].z < -15.0f)
-                provas[i].ativo = false;
+            // Colisões
+            for (int i = 0; i < MAX_OBSTACULOS; i++) {
+                if (obstaculos[i].ativo) {
+                    obstaculos[i].z -= (0.3f * speedMultiplier); 
+                    if (obstaculos[i].z < -15.0f) obstaculos[i].ativo = false;
 
-            if (provas[i].z <= PLAYER_COLLISION_Z + 1.5f && provas[i].z >= PLAYER_COLLISION_Z - 1.5f)
-            {
-                bool pegouX = (std::abs(playerX - provas[i].x) < 0.8f);
-                bool pegouY = (playerY < 1.8f);
+                    if (obstaculos[i].z <= (playerZ + 0.5f) && obstaculos[i].z >= (playerZ - 0.5f)) {
+                        bool bateuX = (std::abs(playerX - obstaculos[i].x) < 0.8f);
+                        bool bateuY = (playerY < 0.8f); 
+                        
+                        if (bateuX && bateuY) {
+                            obstaculos[i].ativo = false; 
+                            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC); 
+                            if (professorZ >= Z_PERIGO) {
+                                gameOver = true; 
+                                currentState = GAMEOVER_TELA;
+                            } else {
+                                targetPlayerX = lastPlayerX;
+                                tremorTempo = 15; 
+                                professorZ += 3.0f; 
+                            }
+                        }
+                    }
+                } 
+            }
 
-                if (pegouX && pegouY)
-                {
-                    provas[i].ativo = false;
-                    professorZ -= 2.5f;
-                    if (professorZ < -20.0f)
-                        professorZ = -20.0f;
-                    PlaySound(TEXT("assets/sounds/coleta.wav"), NULL, SND_ASYNC);
-                }
+            for (int i = 0; i < MAX_PROVAS; i++) {
+                if (provas[i].ativo) {
+                    provas[i].z -= (0.3f * speedMultiplier); 
+                    if (provas[i].z < -15.0f) provas[i].ativo = false;
+
+                    if (provas[i].z <= (playerZ + 1.5f) && provas[i].z >= (playerZ - 1.5f)) {
+                        bool pegouX = (std::abs(playerX - provas[i].x) < 0.8f);
+                        bool pegouY = (playerY < 1.8f);
+                        
+                        if (pegouX && pegouY) {
+                            provas[i].ativo = false; 
+                            professorZ -= 2.5f; 
+                            if (professorZ < -20.0f) professorZ = -20.0f; 
+                            PlaySound(TEXT("assets/sounds/coleta.wav"), NULL, SND_ASYNC);
+                        }
+                    }
+                } 
             }
         }
     }
