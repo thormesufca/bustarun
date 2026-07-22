@@ -717,7 +717,7 @@ void timer(int value) {
                     obstaculos[i].z -= (0.3f * speedMultiplier); 
                     if (obstaculos[i].z < -15.0f) obstaculos[i].ativo = false;
 
-                    if (obstaculos[i].z <= (playerZ + 0.5f) && obstaculos[i].z >= (playerZ - 0.5f)) {
+                    if (obstaculos[i].z <= (PLAYER_COLLISION_Z + 0.5f) && obstaculos[i].z >= (PLAYER_COLLISION_Z - 0.5f)) {
                         bool bateuX = (std::abs(playerX - obstaculos[i].x) < 0.8f);
                         bool bateuY = (playerY < 0.8f); 
                         
@@ -742,7 +742,7 @@ void timer(int value) {
                     provas[i].z -= (0.3f * speedMultiplier); 
                     if (provas[i].z < -15.0f) provas[i].ativo = false;
 
-                    if (provas[i].z <= (playerZ + 1.5f) && provas[i].z >= (playerZ - 1.5f)) {
+                    if (provas[i].z <= (PLAYER_COLLISION_Z + 1.5f) && provas[i].z >= (PLAYER_COLLISION_Z - 1.5f)) {
                         bool pegouX = (std::abs(playerX - provas[i].x) < 0.8f);
                         bool pegouY = (playerY < 1.8f);
                         
