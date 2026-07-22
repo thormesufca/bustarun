@@ -84,13 +84,12 @@ const float Z_GAMEOVER = -3.0f; // Distância para gameover
 // Variáveis de Cenário
 float offsetCenario = 0.0f; // Faz o cenario se mover
 
-// Spots do teto do corredor: percorrem o corredor (mesma lógica de scroll dos
-// obstáculos) e piscam. Reaproveitam LIGHT1 (frente) e LIGHT2 (fundo/professor).
-float spotFrenteZ = 5.0f;               // Z atual da LIGHT1
-float spotProfZ = -15.0f;               // Z atual da LIGHT2
+float spotViajanteZ = 5.0f;             // Z atual da LIGHT1
 const float SPOT_TETO_Z_INICIO = 15.0f; // Onde a luz "nasce" (mesmo limite do chão)
 const float SPOT_TETO_Z_FIM = -30.0f;   // Onde a luz some e reinicia (mesmo limite do chão)
 const float SPOT_TETO_PERCURSO = SPOT_TETO_Z_INICIO - SPOT_TETO_Z_FIM;
+const float SPOT_PROFESSOR_ALTURA = 3.0f;
+const float SPOT_PROFESSOR_OFFSET_Z = 4.0f;
 
 // Struct dos objetos presentes no jogo
 enum TipoObjeto
@@ -173,7 +172,7 @@ void init()
     GLfloat luz_difusa[] = {0.45f, 0.45f, 0.45f, 1.0f}; // Cor principal da luz (reduzida p/ não saturar)
     // Especular reduzida: LIGHT0 é fixa e nunca muda, então um brilho especular
     // forte dela ficaria constante no jogador e disfarçaria a passagem dos spots.
-    GLfloat luz_especular[] = {0.15f, 0.15f, 0.15f, 1.0f};
+    GLfloat luz_especular[] = {0.5f, 0.5f, 0.5f, 1.0f};
     glLightfv(GL_LIGHT0, GL_POSITION, luz_posicao);
     glLightfv(GL_LIGHT0, GL_AMBIENT, luz_ambiente);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, luz_difusa);
@@ -187,8 +186,8 @@ void init()
     glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 10.0f); // Foco no centro
 
     glEnable(GL_LIGHT2);
-    glLightf(GL_LIGHT2, GL_SPOT_CUTOFF, 35.0f);
-    glLightf(GL_LIGHT2, GL_SPOT_EXPONENT, 10.0f);
+    glLightf(GL_LIGHT2, GL_SPOT_CUTOFF, 15.0f);
+    glLightf(GL_LIGHT2, GL_SPOT_EXPONENT, 60.0f);
 
     // Carregamento de Texturas
     texMenu = loadTexture("assets/textures/background.png");
@@ -366,17 +365,57 @@ void desenharCena()
     GLfloat mat_prof[] = {1.0f, 1.0f, 1.0f, 1.0f};
     glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_prof);
 
+    // "dist" normalizada: 1 quando o professor está longe (Z inicial, -15),
+    // 0 quando ele chega no limite de game over (Z_GAMEOVER). Zerando G e B
+    // do especular conforme ele se aproxima, o reflexo vai de quase branco
+    // para vermelho puro — um aviso visual de perigo.
+    float dist = (professorZ - Z_GAMEOVER) / (-15.0f - Z_GAMEOVER);
+    if (dist < 0.0f)
+        dist = 0.0f;
+    if (dist > 1.0f)
+        dist = 1.0f;
+
+    GLfloat mat_prof_espec[] = {1.0f, 1.0f * dist, 1.0f * dist, 1.0f};
+    glMaterialfv(GL_FRONT, GL_SPECULAR, mat_prof_espec);
+    glMaterialf(GL_FRONT, GL_SHININESS, 90.0f);
+
     glPushMatrix();
     glTranslatef(0.0f, 3.0f, professorZ);
+    // Subdividido numa grade (não um quad único): a iluminação do OpenGL é
+    // calculada por vértice, então um único quad de 10x10 só teria os 4 cantos
+    // como vértices, e a luz da LIGHT2 nunca formaria um foco concentrado no
+    // meio da imagem (mesmo motivo pelo qual o chão/paredes foram subdivididos
+    // em desenharCorredores()).
+    const int segmentosProf = 10;
+    const float ladoProf = 10.0f; // De -5 a 5
+    const float passoProf = ladoProf / segmentosProf;
     glBegin(GL_QUADS);
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex3f(-5.0f, -5.0f, 0.0f);
-    glTexCoord2f(1.0f, 0.0f);
-    glVertex3f(5.0f, -5.0f, 0.0f);
-    glTexCoord2f(1.0f, 1.0f);
-    glVertex3f(5.0f, 5.0f, 0.0f);
-    glTexCoord2f(0.0f, 1.0f);
-    glVertex3f(-5.0f, 5.0f, 0.0f);
+    // Sem isso, o quad herda a normal deixada pela última superfície desenhada
+    // em desenharCorredores() (uma parede lateral) e a LIGHT2 não ilumina nada.
+    glNormal3f(0.0f, 0.0f, 1.0f); // Billboard voltado pra câmera (+Z)
+    for (int iy = 0; iy < segmentosProf; iy++)
+    {
+        float y0 = -5.0f + iy * passoProf;
+        float y1 = y0 + passoProf;
+        float v0 = (float)iy / segmentosProf;
+        float v1 = (float)(iy + 1) / segmentosProf;
+        for (int ix = 0; ix < segmentosProf; ix++)
+        {
+            float x0 = -5.0f + ix * passoProf;
+            float x1 = x0 + passoProf;
+            float u0 = (float)ix / segmentosProf;
+            float u1 = (float)(ix + 1) / segmentosProf;
+
+            glTexCoord2f(u0, v0);
+            glVertex3f(x0, y0, 0.0f);
+            glTexCoord2f(u1, v0);
+            glVertex3f(x1, y0, 0.0f);
+            glTexCoord2f(u1, v1);
+            glVertex3f(x1, y1, 0.0f);
+            glTexCoord2f(u0, v1);
+            glVertex3f(x0, y1, 0.0f);
+        }
+    }
     glEnd();
     glPopMatrix();
 
@@ -463,32 +502,40 @@ void desenharCena()
     }
 }
 
-// Move os spots do teto ao longo do corredor (mesma lógica de scroll usada
-// pelos obstáculos/chão) e faz a intensidade piscar com uma senoide.
-// Precisa ser chamada a cada frame, depois do gluLookAt.
+// Move o spot viajante (LIGHT1) ao longo do corredor (mesma lógica de scroll
+// usada pelos obstáculos/chão), acompanha o professor com a LIGHT2 (sempre
+// a uma altura fixa acima dele, não presa a um ponto do corredor) e faz a
+// intensidade piscar com uma senoide. Precisa ser chamada a cada frame,
+// depois do gluLookAt.
 void atualizarSpotsTeto()
 {
     float tempo = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
 
     if (currentState == JOGANDO && !gameOver)
     {
-        spotFrenteZ -= (0.2f * speedMultiplier);
-        if (spotFrenteZ < SPOT_TETO_Z_FIM)
-            spotFrenteZ += SPOT_TETO_PERCURSO;
-
-        spotProfZ -= (0.2f * speedMultiplier);
-        if (spotProfZ < SPOT_TETO_Z_FIM)
-            spotProfZ += SPOT_TETO_PERCURSO;
+        spotViajanteZ -= (0.2f * speedMultiplier);
+        if (spotViajanteZ < SPOT_TETO_Z_FIM)
+            spotViajanteZ += SPOT_TETO_PERCURSO;
     }
 
-    GLfloat spot1_pos[] = {0.0f, 6.0f, spotFrenteZ, 1.0f};
-    GLfloat spot2_pos[] = {0.0f, 6.0f, spotProfZ, 1.0f};
+    GLfloat spot1_pos[] = {0.0f, 6.0f, spotViajanteZ, 1.0f};
+    // O centro do billboard do professor é desenhado em (0, 3, professorZ)
+    // (mesmo translate usado em desenharCena()). A luz fica um pouco à frente
+    // dele (Z maior, do lado da câmera/jogador) em vez de direto acima, pra
+    // não ficar perpendicular à imagem (que não refletiria nada).
+    float profCentroX = 0.0f, profCentroY = 3.0f, profCentroZ = professorZ;
+    GLfloat spot2_pos[] = {0.0f, SPOT_PROFESSOR_ALTURA, professorZ + SPOT_PROFESSOR_OFFSET_Z, 1.0f};
     // Levemente inclinada para +/-Z (não reto pra baixo): o chão tem normal
     // pra cima e pega luz bem de qualquer jeito, mas o personagem é visto de
     // frente/costas (normal ~Z) e reto-pra-baixo quase não o atinge (N.L~0).
     // Uma leve inclinação dá um N.L bem maior quando o spot passa perto dele.
     GLfloat dirFrente[] = {0.0f, -1.0f, -0.4f};
-    GLfloat dirProf[] = {0.0f, -1.0f, 0.4f};
+    // Recalculada a cada frame pra sempre apontar de volta pro centro do
+    // professor, já que a luz agora está deslocada dele (não mais direto acima).
+    GLfloat dirProf[] = {
+        profCentroX - spot2_pos[0],
+        profCentroY - spot2_pos[1],
+        profCentroZ - spot2_pos[2]};
     glLightfv(GL_LIGHT1, GL_POSITION, spot1_pos);
     glLightfv(GL_LIGHT2, GL_POSITION, spot2_pos);
     // Redefinida aqui (não só em init()) pra usar a mesma transformação de
@@ -878,7 +925,8 @@ void timer(int value)
             {
                 gameOver = true;
                 currentState = GAMEOVER_TELA; // NOVO: Força o estado pra garantir
-                if(score > topScore){
+                if (score > topScore)
+                {
                     topScore = score;
                 }
             }
