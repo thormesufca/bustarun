@@ -355,6 +355,69 @@ void desenharCorredores()
     glDisable(GL_TEXTURE_2D);
 }
 
+// Desenha a sombra do jogador projetada a partir da luz que percorre o
+// corredor (LIGHT1 / spotViajanteZ), em vez de uma sombra fixa embaixo dele.
+// A sombra é deslocada/esticada na direção oposta à luz (mesma matemática de
+// projetar a reta luz->corpo até encontrar o chão em y=0, como a sombra real
+// de um poste de luz) e sua opacidade varia com a proximidade da luz: quase
+// invisível quando ela está longe, escura e concentrada quando passa por cima
+// do jogador. Precisa ser chamada de dentro da matriz do jogador (mesmo
+// referencial usado pra desenhá-lo), antes de desenhá-lo.
+void desenharSombraJogador(float inclinacao)
+{
+    // Posição/altura da luz que "projeta" a sombra (mesma usada pela LIGHT1
+    // em atualizarSpotsTeto() — X sempre 0, altura sempre 6).
+    const float luzX = 0.0f;
+    const float luzY = 6.0f;
+    const float luzZ = spotViajanteZ;
+
+    // Altura aproximada do "corpo" do jogador que recebe a luz (sobe um
+    // pouco durante o pulo, arrastando a sombra projetada junto).
+    float corpoY = 1.0f + playerY;
+
+    // Projeta a reta luz -> corpo até encontrar o chão (y=0): quanto mais a
+    // luz estiver deslocada em Z do jogador, mais a sombra se estica/desloca
+    // pro lado oposto, igual a uma sombra de poste de luz de verdade.
+    float t = luzY / (luzY - corpoY);
+    float sombraX = luzX + t * (playerX - luzX);
+    float sombraZ = luzZ + t * (playerZ - luzZ);
+
+    // Opacidade: forte quando a luz está bem perto do jogador (em Z), quase
+    // some quando ela está longe (sem luz forte o bastante pra revelar a sombra).
+    float distLuz = fabsf(spotViajanteZ - playerZ);
+    const float raioEfeito = 6.0f;
+    float opacidade = 1.0f - (distLuz / raioEfeito);
+    if (opacidade < 0.15f)
+        opacidade = 0.15f; // Sombra de contato mínima, nunca some 100%
+    if (opacidade > 1.0f)
+        opacidade = 1.0f;
+
+    glPushMatrix();
+    glTranslatef(sombraX, 0.01f, sombraZ);
+    glRotatef(inclinacao, 0.0f, 0.0f, 1.0f); // Mesma animação do jogador
+
+    // Escala: mesmo fator de projeção "t" usado na posição, normalizado pra
+    // valer 1.0 no chão (altura de referência 1.0). Fisicamente, quanto mais
+    // perto da luz (jogador mais alto no pulo), maior a sombra projetada.
+    float shadowScale = (luzY - 1.0f) / (luzY - corpoY);
+    if (shadowScale < 0.8f)
+        shadowScale = 0.8f; // Limite mínimo de tamanho
+    if (shadowScale > 2.5f)
+        shadowScale = 2.5f; // Limite máximo, pra não ficar absurda perto da luz
+
+    // Achata a sombra no Y
+    glScalef(shadowScale, 0.01f, shadowScale);
+
+    glDisable(GL_LIGHTING); // Sombra não recebe luz
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(0.0f, 0.0f, 0.0f, opacidade);
+    estudanteModel.draw();
+    glDisable(GL_BLEND);
+    glEnable(GL_LIGHTING);
+    glPopMatrix();
+}
+
 void desenharCena()
 {
 
@@ -427,25 +490,8 @@ void desenharCena()
     float balancoCorrida = gameOver ? 0.0f : (sin(tempo * 15.0f) * 0.1f);
     float inclinacao = gameOver ? 0.0f : (cos(tempo * 7.0f) * 5.0f);
 
-    // Desenhar Sombra
-    glPushMatrix();
-    // Acompanha a posição X do jogador
-    glTranslatef(playerX, 0.01f, playerZ);
-    glRotatef(inclinacao, 0.0f, 0.0f, 1.0f); // Animacao
-
-    // Quanto mais alto o jogador pula a sombra muda
-    float shadowScale = 1.0f - (playerY * 0.2f);
-    if (shadowScale < 0.8f)
-        shadowScale = 0.8f; // Limite mínimo de tamanho
-
-    // Achata a sombra no Y
-    glScalef(shadowScale, 0.01f, shadowScale);
-
-    glDisable(GL_LIGHTING);      // Sombra não recebe luz
-    glColor3f(0.0f, 0.0f, 0.0f); // Cor cinza bem escuro
-    estudanteModel.draw();
-    glEnable(GL_LIGHTING);
-    glPopMatrix();
+    // Desenhar Sombra (projetada a partir da luz que percorre o corredor)
+    desenharSombraJogador(inclinacao);
 
     // Desenhar Jogador
     glTranslatef(playerX, 0.0f + playerY + balancoCorrida, playerZ);
