@@ -47,8 +47,8 @@ Opções extras do Makefile:
 - [x] **Colisão com objetos**
 - [x] **Gerador aleatório de Obstáculos e Provas**
 - [x] **Jumpscare do professor e Screen Shake**
-- [ ] **Modelo do Obstáculo** Substituir o cubo vermelho por um modelo 3D de itens da faculdade.
-- [ ] **Modelo da Prova** Substituir o cubo dourado por um modelo 3D de uma pilha de provas.
+- [x] **Modelo do Obstáculo** Substituir o cubo vermelho por um modelo 3D de itens da faculdade. Três tipos sorteados: carteira universitária, lixeira e pilha de livros.
+- [x] **Modelo da Prova** Substituir o cubo dourado por um modelo 3D de uma pilha de provas.
 - [ ] **Skins do Jogador** Editar o arquivo de textura do personagem para colar o rosto dos membros da equipe.
 - [ ] **Texturas Finais da UFCA** Trocar as texturas de teste provisórias por fotos reais que lembrem os blocos da UFCA.
 - [x] **Sombras Projetadas** Criar a projeção da sombra no chão achatando os vértices do jogador e dos objetos com a cor cinza escura, sem iluminação
