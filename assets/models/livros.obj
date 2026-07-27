@@ -1,5 +1,4 @@
 # Pilha de livros - obstaculo do UFCA Runner
-# Gerado por tools/gerar_modelos.py
 mtllib livros.mtl
 o livros
 v -0.165055 0.000000 -0.206051

@@ -1,5 +1,4 @@
 # Pilha de provas - item coletavel do UFCA Runner
-# Gerado por tools/gerar_modelos.py
 mtllib prova.mtl
 o prova
 v -0.267284 -0.277585 -0.040000

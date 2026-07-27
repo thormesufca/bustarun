@@ -1,5 +1,4 @@
 # Carteira universitaria - obstaculo do UFCA Runner
-# Gerado por tools/gerar_modelos.py
 mtllib carteira.mtl
 o carteira
 v -0.225000 0.000000 -0.225000

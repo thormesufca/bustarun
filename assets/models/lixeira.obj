@@ -1,5 +1,4 @@
 # Lixeira de corredor - obstaculo do UFCA Runner
-# Gerado por tools/gerar_modelos.py
 mtllib lixeira.mtl
 o lixeira
 v -0.180000 0.000000 -0.180000
