@@ -227,9 +227,9 @@ void init()
     texSkins[2] = loadTexture("assets/textures/Bustamante.png");
     texProfessor = texSkins[0]; // Skin Default
 
-    // Obstáculos e prova: modelos .obj com vários materiais (ver
-    // tools/gerar_modelos.py). Cada grupo usemtl vira uma parte com
-    // propriedades ópticas próprias, aplicadas pelo drawWithMaterials().
+    // Obstáculos e prova: modelos .obj com vários materiais. Cada grupo
+    // usemtl do arquivo vira uma parte com propriedades ópticas próprias,
+    // aplicadas pelo drawWithMaterials().
     for (int i = 0; i < NUM_TIPOS_OBSTACULO; i++)
     {
         temModeloObstaculo[i] = obstaculoModels[i].load(arquivosObstaculo[i]);
