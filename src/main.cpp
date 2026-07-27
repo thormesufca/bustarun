@@ -3,10 +3,10 @@
 #include <string>
 #include "../include/obj_loader.h"
 #include "../include/texture_loader.h"
+#include "../include/audio.h"
 #include <cstdlib>
+#include <cstdio>
 #include <cmath>
-#include <windows.h>
-#include <mmsystem.h>
 
 // Tamanho da janela
 int windowWidth = 800;
@@ -775,7 +775,7 @@ void keyboard(unsigned char key, int x, int y)
             exit(0); // Fecha o jogo se estiver no MENU
         else if (currentState == JOGANDO || currentState == GAMEOVER_TELA || currentState == CREDITOS || currentState == SKINS)
         {
-            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC);
+            audioPlay("assets/sounds/colisao.wav");
             currentState = MENU_INICIAL; // Volta ao menu
             resetarJogo();
         }
@@ -800,7 +800,7 @@ void keyboard(unsigned char key, int x, int y)
     {
         if (key == 13)
         { // Tecla ENTER
-            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC);
+            audioPlay("assets/sounds/colisao.wav");
             if (menuSelecionado == 0)
             {
                 currentState = JOGANDO;
@@ -831,7 +831,7 @@ void keyboard(unsigned char key, int x, int y)
     {
         if (key == 'r' || key == 'R')
         {
-            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC);
+            audioPlay("assets/sounds/colisao.wav");
 
             // Reinicia o jogo
             currentState = JOGANDO;
@@ -877,14 +877,14 @@ void specialKeys(int key, int x, int y)
     {
         if (key == GLUT_KEY_UP)
         {
-            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC);
+            audioPlay("assets/sounds/colisao.wav");
             menuSelecionado--;
             if (menuSelecionado < 0)
                 menuSelecionado = MAX_MENU_OPCOES - 1;
         }
         if (key == GLUT_KEY_DOWN)
         {
-            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC);
+            audioPlay("assets/sounds/colisao.wav");
             menuSelecionado++;
             if (menuSelecionado >= MAX_MENU_OPCOES)
                 menuSelecionado = 0;
@@ -894,14 +894,14 @@ void specialKeys(int key, int x, int y)
     {
         if (key == GLUT_KEY_LEFT)
         {
-            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC);
+            audioPlay("assets/sounds/colisao.wav");
             skinSelecionada--;
             if (skinSelecionada < 0)
                 skinSelecionada = MAX_SKINS - 1;
         }
         if (key == GLUT_KEY_RIGHT)
         {
-            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC);
+            audioPlay("assets/sounds/colisao.wav");
             skinSelecionada++;
             if (skinSelecionada >= MAX_SKINS)
                 skinSelecionada = 0;
@@ -1040,7 +1040,7 @@ void timer(int value)
                         if (bateuX && bateuY)
                         {
                             obstaculos[i].ativo = false;
-                            PlaySound(TEXT("assets/sounds/colisao.wav"), NULL, SND_ASYNC);
+                            audioPlay("assets/sounds/colisao.wav");
                             if (professorZ >= Z_PERIGO)
                             {
                                 gameOver = true;
@@ -1080,7 +1080,7 @@ void timer(int value)
                             professorZ -= 2.5f;
                             if (professorZ < -20.0f)
                                 professorZ = -20.0f;
-                            PlaySound(TEXT("assets/sounds/coleta.wav"), NULL, SND_ASYNC);
+                            audioPlay("assets/sounds/coleta.wav");
                         }
                     }
                 }
@@ -1110,6 +1110,12 @@ int main(int argc, char **argv)
     }
 
     init();
+
+    // O jogo chama exit() direto em vários pontos (menu, ESC), então o
+    // encerramento do áudio fica registrado no atexit em vez de depois do
+    // glutMainLoop, que nem sempre é alcançado.
+    audioInit();
+    atexit(audioShutdown);
 
     glutDisplayFunc(display);     // Renderização
     glutReshapeFunc(reshape);     // Redimensionamento

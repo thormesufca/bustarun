@@ -4,3 +4,7 @@ freeglut/
 
 #Extension
 *.exe
+
+#Build
+bin/
+*.o
