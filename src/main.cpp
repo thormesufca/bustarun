@@ -50,8 +50,24 @@ const int numCreditos = 7;
 
 // Variáveis de Objetos
 OBJModel estudanteModel;
-OBJModel obstaculoModel;
 OBJModel provaModel;
+
+// Tipos de obstáculo que podem aparecer no corredor. Cada um é um .obj
+// próprio, com altura diferente — o que muda a altura que o jogador precisa
+// alcançar no pulo pra passar por cima.
+const int NUM_TIPOS_OBSTACULO = 3;
+OBJModel obstaculoModels[NUM_TIPOS_OBSTACULO];
+const char *arquivosObstaculo[NUM_TIPOS_OBSTACULO] = {
+    "assets/models/carteira.obj",
+    "assets/models/lixeira.obj",
+    "assets/models/livros.obj"};
+// Altura de cada modelo (a mesma da bounding box do .obj)
+const float alturasObstaculo[NUM_TIPOS_OBSTACULO] = {1.00f, 0.81f, 0.45f};
+
+// Se o .obj do obstáculo/prova não carregar, o jogo continua desenhando os
+// cubos antigos no lugar, em vez de ficar com objetos invisíveis.
+bool temModeloObstaculo[NUM_TIPOS_OBSTACULO] = {false, false, false};
+bool temModeloProva = false;
 
 // Variáveis de Texturas
 GLuint texProfessor;
@@ -102,9 +118,11 @@ struct Objeto
     float x, y, z;
     bool ativo;
     TipoObjeto tipo;
+    int modelo; // Qual dos modelos de obstáculo usar (índice em obstaculoModels)
 };
 const int MAX_OBSTACULOS = 5;      // Qtd max de obstaculos na tela
 Objeto obstaculos[MAX_OBSTACULOS]; // Lista de obstaculos
+
 
 const int MAX_PROVAS = 2;
 Objeto provas[MAX_PROVAS];
@@ -209,15 +227,24 @@ void init()
     texSkins[2] = loadTexture("assets/textures/Bustamante.png");
     texProfessor = texSkins[0]; // Skin Default
 
-    // Descomente quando tiver os modelos
-    /*
-    if (!obstaculoModel.load("assets/models/cadeira.obj")) {
-         std::cerr << "Falha ao carregar o obstaculo!" << std::endl;
+    // Obstáculos e prova: modelos .obj com vários materiais (ver
+    // tools/gerar_modelos.py). Cada grupo usemtl vira uma parte com
+    // propriedades ópticas próprias, aplicadas pelo drawWithMaterials().
+    for (int i = 0; i < NUM_TIPOS_OBSTACULO; i++)
+    {
+        temModeloObstaculo[i] = obstaculoModels[i].load(arquivosObstaculo[i]);
+        if (!temModeloObstaculo[i])
+        {
+            std::cerr << "Falha ao carregar " << arquivosObstaculo[i]
+                      << "! Usando o cubo como reserva." << std::endl;
+        }
     }
-    if (!provaModel.load("assets/models/prova.obj")) {
-         std::cerr << "Falha ao carregar a prova!" << std::endl;
+
+    temModeloProva = provaModel.load("assets/models/prova.obj");
+    if (!temModeloProva)
+    {
+        std::cerr << "Falha ao carregar a prova! Usando o cubo como reserva." << std::endl;
     }
-    */
 }
 
 // Redesenho da janela e configuração da projeção
@@ -251,9 +278,16 @@ void desenharCorredores()
 {
     glEnable(GL_TEXTURE_2D);
 
-    // Material neutro para as paredes e chão não brilharem demais
+    // Material neutro para as paredes e chão não brilharem demais.
+    // O especular precisa ser zerado explicitamente: o material do OpenGL é
+    // estado global, então sem isso o cenário herda o especular do último
+    // objeto desenhado no frame anterior. Com shininess 0, esse reflexo
+    // herdado não fica num ponto de brilho — ele se espalha por igual pela
+    // superfície inteira e clareia o corredor todo.
     GLfloat mat_cenario[] = {0.8f, 0.8f, 0.8f, 1.0f};
+    GLfloat mat_cenario_espec[] = {0.0f, 0.0f, 0.0f, 1.0f};
     glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_cenario);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, mat_cenario_espec);
     glMaterialf(GL_FRONT, GL_SHININESS, 0.0f); // Cenário é fosco
 
     // Chão e paredes precisam ser desenhados em vários segmentos pequenos, e não
@@ -363,7 +397,12 @@ void desenharCorredores()
 // invisível quando ela está longe, escura e concentrada quando passa por cima
 // do jogador. Precisa ser chamada de dentro da matriz do jogador (mesmo
 // referencial usado pra desenhá-lo), antes de desenhá-lo.
-void desenharSombraJogador(float inclinacao)
+// Calcula onde a sombra de um objeto cai no chão, e com que tamanho e força.
+// Serve para qualquer objeto da cena (jogador, carteiras, provas), já que a
+// projeção depende só da posição dele em relação à luz.
+void calcularSombra(float objX, float objZ, float corpoY,
+                    float &sombraX, float &sombraZ,
+                    float &escala, float &opacidade)
 {
     // Posição/altura da luz que "projeta" a sombra (mesma usada pela LIGHT1
     // em atualizarSpotsTeto() — X sempre 0, altura sempre 6).
@@ -371,50 +410,88 @@ void desenharSombraJogador(float inclinacao)
     const float luzY = 6.0f;
     const float luzZ = spotViajanteZ;
 
-    // Altura aproximada do "corpo" do jogador que recebe a luz (sobe um
-    // pouco durante o pulo, arrastando a sombra projetada junto).
-    float corpoY = 1.0f + playerY;
-
     // Projeta a reta luz -> corpo até encontrar o chão (y=0): quanto mais a
-    // luz estiver deslocada em Z do jogador, mais a sombra se estica/desloca
+    // luz estiver deslocada em Z do objeto, mais a sombra se estica/desloca
     // pro lado oposto, igual a uma sombra de poste de luz de verdade.
     float t = luzY / (luzY - corpoY);
-    float sombraX = luzX + t * (playerX - luzX);
-    float sombraZ = luzZ + t * (playerZ - luzZ);
+    sombraX = luzX + t * (objX - luzX);
+    sombraZ = luzZ + t * (objZ - luzZ);
 
-    // Opacidade: forte quando a luz está bem perto do jogador (em Z), quase
+    // Opacidade: forte quando a luz está bem perto do objeto (em Z), quase
     // some quando ela está longe (sem luz forte o bastante pra revelar a sombra).
-    float distLuz = fabsf(spotViajanteZ - playerZ);
+    float distLuz = fabsf(spotViajanteZ - objZ);
     const float raioEfeito = 6.0f;
-    float opacidade = 1.0f - (distLuz / raioEfeito);
+    opacidade = 1.0f - (distLuz / raioEfeito);
     if (opacidade < 0.15f)
         opacidade = 0.15f; // Sombra de contato mínima, nunca some 100%
     if (opacidade > 1.0f)
         opacidade = 1.0f;
 
+    // Escala: mesmo fator de projeção "t" usado na posição, normalizado pra
+    // valer 1.0 no chão (altura de referência 1.0). Fisicamente, quanto mais
+    // perto da luz (objeto mais alto), maior a sombra projetada.
+    escala = (luzY - 1.0f) / (luzY - corpoY);
+    if (escala < 0.8f)
+        escala = 0.8f; // Limite mínimo de tamanho
+    if (escala > 2.5f)
+        escala = 2.5f; // Limite máximo, pra não ficar absurda perto da luz
+}
+
+// Prepara o OpenGL para desenhar sombras: elas são silhuetas pretas
+// semitransparentes, sem iluminação nenhuma.
+void iniciarSombras()
+{
+    glDisable(GL_LIGHTING); // Sombra não recebe luz
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+}
+
+void terminarSombras()
+{
+    glDisable(GL_BLEND);
+    glEnable(GL_LIGHTING);
+}
+
+void desenharSombraJogador(float inclinacao)
+{
+    // Altura aproximada do "corpo" do jogador que recebe a luz (sobe um
+    // pouco durante o pulo, arrastando a sombra projetada junto).
+    float corpoY = 1.0f + playerY;
+
+    float sombraX, sombraZ, escala, opacidade;
+    calcularSombra(playerX, playerZ, corpoY, sombraX, sombraZ, escala, opacidade);
+
     glPushMatrix();
     glTranslatef(sombraX, 0.01f, sombraZ);
     glRotatef(inclinacao, 0.0f, 0.0f, 1.0f); // Mesma animação do jogador
 
-    // Escala: mesmo fator de projeção "t" usado na posição, normalizado pra
-    // valer 1.0 no chão (altura de referência 1.0). Fisicamente, quanto mais
-    // perto da luz (jogador mais alto no pulo), maior a sombra projetada.
-    float shadowScale = (luzY - 1.0f) / (luzY - corpoY);
-    if (shadowScale < 0.8f)
-        shadowScale = 0.8f; // Limite mínimo de tamanho
-    if (shadowScale > 2.5f)
-        shadowScale = 2.5f; // Limite máximo, pra não ficar absurda perto da luz
-
     // Achata a sombra no Y
-    glScalef(shadowScale, 0.01f, shadowScale);
+    glScalef(escala, 0.01f, escala);
 
-    glDisable(GL_LIGHTING); // Sombra não recebe luz
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    iniciarSombras();
     glColor4f(0.0f, 0.0f, 0.0f, opacidade);
     estudanteModel.draw();
-    glDisable(GL_BLEND);
-    glEnable(GL_LIGHTING);
+    terminarSombras();
+    glPopMatrix();
+}
+
+// Sombra de um objeto qualquer da cena (carteira, prova), projetada pela mesma
+// luz e com a mesma matemática usada no jogador.
+void desenharSombraObjeto(const OBJModel &modelo, float objX, float objY, float objZ,
+                          float rotacaoY)
+{
+    float sombraX, sombraZ, escala, opacidade;
+    calcularSombra(objX, objZ, objY, sombraX, sombraZ, escala, opacidade);
+
+    glPushMatrix();
+    glTranslatef(sombraX, 0.01f, sombraZ);
+    glRotatef(rotacaoY, 0.0f, 1.0f, 0.0f); // Acompanha o giro do objeto
+    glScalef(escala, 0.01f, escala);
+
+    iniciarSombras();
+    glColor4f(0.0f, 0.0f, 0.0f, opacidade);
+    modelo.draw();
+    terminarSombras();
     glPopMatrix();
 }
 
@@ -510,39 +587,75 @@ void desenharCena()
     estudanteModel.draw();
     glPopMatrix();
 
-    // Desenha os obstáculos
-    glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
-    GLfloat sem_brilho[] = {0.0f, 0.0f, 0.0f, 1.0f};
-    glMaterialfv(GL_FRONT, GL_SPECULAR, sem_brilho);
+    // Desenha os obstáculos (carteiras universitárias). Cada parte do modelo
+    // tem seu próprio material vindo do .mtl: metal com reflexo concentrado,
+    // plástico com brilho médio e madeira praticamente fosca.
     for (int i = 0; i < MAX_OBSTACULOS; i++)
     {
         if (obstaculos[i].ativo)
         {
+            int m = obstaculos[i].modelo;
+            if (temModeloObstaculo[m])
+            {
+                desenharSombraObjeto(obstaculoModels[m], obstaculos[i].x,
+                                     alturasObstaculo[m] / 2.0f, obstaculos[i].z, 0.0f);
+            }
+
             glPushMatrix();
             glTranslatef(obstaculos[i].x, obstaculos[i].y, obstaculos[i].z);
-            GLfloat mat_obs[] = {0.8f, 0.1f, 0.1f, 1.0f}; // Vermelho
-            glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_obs);
-            glutSolidCube(1.0f); // Comente essa linha quando tiver o modelo
-            // obstaculoModel.draw(); // Descomente esta linha
+            if (temModeloObstaculo[m])
+            {
+                obstaculoModels[m].drawWithMaterials();
+            }
+            else
+            {
+                // Reserva: o cubo vermelho original
+                glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
+                GLfloat sem_brilho[] = {0.0f, 0.0f, 0.0f, 1.0f};
+                glMaterialfv(GL_FRONT, GL_SPECULAR, sem_brilho);
+                GLfloat mat_obs[] = {0.8f, 0.1f, 0.1f, 1.0f}; // Vermelho
+                glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_obs);
+                glTranslatef(0.0f, 0.5f, 0.0f);
+                glutSolidCube(1.0f);
+            }
             glPopMatrix();
         }
     }
 
-    // Desenha as provas
+    // Desenha as provas (pilha de folhas, com a de cima dourada e bem
+    // especular pra brilhar quando o spot do corredor passa por ela)
     for (int i = 0; i < MAX_PROVAS; i++)
     {
         if (provas[i].ativo)
         {
+            // Balanço da prova. É uma oscilação (vai e volta) em vez de um giro
+            // completo: como as folhas ficam em pé e têm pouca espessura, um
+            // giro de 360 graus as deixaria de perfil — quase invisíveis — duas
+            // vezes por volta. Assim elas ficam sempre legíveis de frente.
+            float tempoAnim = sinf(glutGet(GLUT_ELAPSED_TIME) / 1000.0f * 1.6f) * 35.0f;
+
+            if (temModeloProva)
+            {
+                desenharSombraObjeto(provaModel, provas[i].x, provas[i].y, provas[i].z, tempoAnim);
+            }
+
             glPushMatrix();
             glTranslatef(provas[i].x, provas[i].y, provas[i].z);
-            GLfloat mat_prova[] = {0.9f, 0.8f, 0.1f, 1.0f}; // Amarelo Dourado
-            glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_prova);
-
-            // Faz a prova girar
-            float tempoAnim = glutGet(GLUT_ELAPSED_TIME) / 10.0f;
             glRotatef(tempoAnim, 0.0f, 1.0f, 0.0f);
-            glutSolidCube(0.8f); // Comente essa linha quando tiver o modelo
-            // provaModel.draw(); // Descomente esta linha
+            if (temModeloProva)
+            {
+                provaModel.drawWithMaterials();
+            }
+            else
+            {
+                // Reserva: o cubo dourado original
+                glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
+                GLfloat sem_brilho[] = {0.0f, 0.0f, 0.0f, 1.0f};
+                glMaterialfv(GL_FRONT, GL_SPECULAR, sem_brilho);
+                GLfloat mat_prova[] = {0.9f, 0.8f, 0.1f, 1.0f}; // Amarelo Dourado
+                glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_prova);
+                glutSolidCube(0.8f);
+            }
             glPopMatrix();
         }
     }
@@ -995,8 +1108,9 @@ void timer(int value)
                         {
                             obstaculos[i].ativo = true;
                             obstaculos[i].tipo = OBSTACULO;
+                            obstaculos[i].modelo = rand() % NUM_TIPOS_OBSTACULO;
                             obstaculos[i].z = 25.0f;
-                            obstaculos[i].y = 0.5f;
+                            obstaculos[i].y = 0.0f; // Modelo apoiado no chão
                             int faixa = rand() % 3;
                             obstaculos[i].x = (faixa == 0) ? -2.0f : ((faixa == 1) ? 0.0f : 2.0f);
                             spawnCooldown = 10 + rand() % 30;
@@ -1012,6 +1126,7 @@ void timer(int value)
                         {
                             provas[i].ativo = true;
                             provas[i].tipo = PROVA;
+                            provas[i].modelo = 0; // Só existe um modelo de prova
                             provas[i].z = 25.0f;
                             provas[i].y = 1.0f;
                             int faixa = rand() % 3;
@@ -1035,7 +1150,10 @@ void timer(int value)
                     if (obstaculos[i].z <= (PLAYER_COLLISION_Z + 0.5f) && obstaculos[i].z >= (PLAYER_COLLISION_Z - 0.5f))
                     {
                         bool bateuX = (std::abs(playerX - obstaculos[i].x) < 0.8f);
-                        bool bateuY = (playerY < 0.8f);
+                        // Cada modelo tem uma altura: dá pra passar por cima
+                        // da pilha de livros com um pulo bem mais baixo do que
+                        // o necessário pra limpar a carteira.
+                        bool bateuY = (playerY < alturasObstaculo[obstaculos[i].modelo]);
 
                         if (bateuX && bateuY)
                         {
