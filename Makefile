@@ -29,7 +29,12 @@ ifeq ($(OS),Windows_NT)
     PLATAFORMA := Windows
     LDLIBS     := -lfreeglut -lopengl32 -lglu32 -lwinmm
     BIN        := $(BIN_DIR)/$(TARGET).exe
+    # No cmd.exe não existem "mkdir -p" nem "rm -rf"
+    CRIAR_DIR  := mkdir $(BIN_DIR)
+    LIMPAR     := if exist $(BIN_DIR) rmdir /s /q $(BIN_DIR)
 else
+    CRIAR_DIR := mkdir -p $(BIN_DIR)
+    LIMPAR    := rm -rf $(BIN_DIR)
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Darwin)
         PLATAFORMA := macOS
@@ -37,6 +42,18 @@ else
     else
         PLATAFORMA := Linux
         LDLIBS     := -lglut -lGLU -lGL -lopenal -lm
+    endif
+endif
+
+# Se a freeglut estiver extraída na raiz do projeto (que é como o Windows do
+# time está montado — o .gitignore ignora essa pasta), usa ela. Sem a pasta,
+# assume a biblioteca instalada no sistema, como no Linux.
+ifneq ($(wildcard freeglut/include),)
+    CXXFLAGS += -Ifreeglut/include
+    ifneq ($(wildcard freeglut/lib/x64),)
+        LDFLAGS += -Lfreeglut/lib/x64
+    else
+        LDFLAGS += -Lfreeglut/lib
     endif
 endif
 
@@ -55,11 +72,11 @@ all: $(BIN)
 
 $(BIN): $(SRC) $(HEADERS) | $(BIN_DIR)
 	@echo "Compilando para $(PLATAFORMA)..."
-	$(CXX) $(CXXFLAGS) $(SRC) -o $@ $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(SRC) -o $@ $(LDFLAGS) $(LDLIBS)
 	@echo "Pronto: $@"
 
 $(BIN_DIR):
-	@mkdir -p $(BIN_DIR)
+	@$(CRIAR_DIR)
 
 # Executa a partir da raiz do projeto: os assets são carregados por caminho
 # relativo ("assets/..."), então rodar de outra pasta não acha as texturas.
@@ -67,5 +84,5 @@ run: $(BIN)
 	./$(BIN)
 
 clean:
-	@rm -rf $(BIN_DIR)
+	@$(LIMPAR)
 	@echo "Arquivos de compilacao removidos."
