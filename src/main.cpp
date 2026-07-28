@@ -683,7 +683,7 @@ void desenharHUD()
 
     char buffer[100];
 
-    if (currentState != JOGANDO)
+    if (currentState != JOGANDO && currentState != GAMEOVER_TELA)
     {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, texMenu);
