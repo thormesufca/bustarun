@@ -18,6 +18,7 @@ bool gameOver = false;
 int score = 0;
 int topScore = 0;
 float speedMultiplier = 1.0f;
+float speedProgression = 0.0003f;
 int spawnCooldown = 0;
 
 enum GameState
@@ -85,10 +86,6 @@ float lastPlayerX = 0.0f;    // Ultima posição do player antes de colidir
 bool isJumping = false;      // Se está pulando
 float jumpSpeed = 0.0f;      // Força do pulo
 
-// Modelos .obj podem não ter a origem centralizada, então o mesh renderizado
-// pode ficar deslocado do ponto de translação (playerZ). PLAYER_COLLISION_Z é
-// calculado em init(), a partir do centro real da bounding box do modelo
-// carregado, para que a colisão continue correta mesmo se o .obj for trocado.
 float PLAYER_COLLISION_Z = playerZ;
 
 // Variáveis do Professor
@@ -164,7 +161,7 @@ void resetarJogo()
 void init()
 {
     // Define a cor do céu
-    glClearColor(0.85f, 0.55f, 0.4f, 1.0f);
+    glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
 
     // Ativa o Z-Buffer
     glEnable(GL_DEPTH_TEST);
@@ -186,19 +183,15 @@ void init()
 
     glEnable(GL_LIGHT0); // Ativa a Luz 0
     GLfloat luz_posicao[] = {0.0f, 5.0f, 15.0f, 1.0f};
-    GLfloat luz_ambiente[] = {0.0f, 0.0f, 0.0f, 1.0f};  // Ilumina as sombras
+    GLfloat luz_ambiente[] = {0.2f, 0.2f, 0.2f, 1.0f};
     GLfloat luz_difusa[] = {0.45f, 0.45f, 0.45f, 1.0f}; // Cor principal da luz (reduzida p/ não saturar)
-    // Especular reduzida: LIGHT0 é fixa e nunca muda, então um brilho especular
-    // forte dela ficaria constante no jogador e disfarçaria a passagem dos spots.
     GLfloat luz_especular[] = {0.5f, 0.5f, 0.5f, 1.0f};
     glLightfv(GL_LIGHT0, GL_POSITION, luz_posicao);
     glLightfv(GL_LIGHT0, GL_AMBIENT, luz_ambiente);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, luz_difusa);
     glLightfv(GL_LIGHT0, GL_SPECULAR, luz_especular);
 
-    // Luz 1 e Luz 2: Spots do teto do corredor. Posição, direção, difusa e
-    // especular são redefinidas a cada frame em atualizarSpotsTeto() (chamada
-    // logo após o gluLookAt), pra usar sempre a mesma transformação da câmera.
+    // Luz 1 e Luz 2: Spots do teto do corredor.
     glEnable(GL_LIGHT1);
     glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 35.0f);   // Abertura do cone de luz
     glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 10.0f); // Foco no centro
@@ -213,7 +206,7 @@ void init()
     texPisoUFCA = loadTexture("assets/textures/piso_ufca.png");
     texParedeUFCA = loadTexture("assets/textures/parede_ufca.png");
 
-    if (!estudanteModel.load("assets/models/estudante.obj"))
+    if (!estudanteModel.load("assets/models/estudanteGraduando.obj"))
     {
         std::cerr << "Falha ao carregar o modelo do estudante!" << std::endl;
     }
@@ -280,11 +273,6 @@ void desenharCorredores()
     glEnable(GL_TEXTURE_2D);
 
     // Material neutro para as paredes e chão não brilharem demais.
-    // O especular precisa ser zerado explicitamente: o material do OpenGL é
-    // estado global, então sem isso o cenário herda o especular do último
-    // objeto desenhado no frame anterior. Com shininess 0, esse reflexo
-    // herdado não fica num ponto de brilho — ele se espalha por igual pela
-    // superfície inteira e clareia o corredor todo.
     GLfloat mat_cenario[] = {0.8f, 0.8f, 0.8f, 1.0f};
     GLfloat mat_cenario_espec[] = {0.0f, 0.0f, 0.0f, 1.0f};
     glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_cenario);
@@ -292,9 +280,7 @@ void desenharCorredores()
     glMaterialf(GL_FRONT, GL_SHININESS, 0.0f); // Cenário é fosco
 
     // Chão e paredes precisam ser desenhados em vários segmentos pequenos, e não
-    // como um único quad gigante: a iluminação do OpenGL é calculada por vértice
-    // e depois interpolada, então um quad de 45 unidades só teria vértices nas
-    // duas pontas — um spot passando pelo meio nunca apareceria.
+    // como um único quad gigante
     const float passoZ = (CORREDOR_Z_INICIO - CORREDOR_Z_FIM) / CORREDOR_SEGMENTOS_Z;
 
     // CHÃO (Piso da UFCA)
@@ -335,20 +321,14 @@ void desenharCorredores()
     const float passoY = 10.0f / segmentosY;
     const float paredesX[2] = {-4.0f, 4.0f};
     const float paredesNormalX[2] = {1.0f, -1.0f}; // Sempre apontando pra dentro do corredor
-    // A parede direita precisa da ordem dos vértices invertida: com o cull face
-    // ativo, a face "de frente" (visível de dentro do corredor) é definida pelo
-    // sentido anti-horário dos vértices, e as duas paredes são espelhadas.
+    // A parede direita precisa da ordem dos vértices invertida para o cull face
     const bool paredesInverter[2] = {false, true};
 
-    // Quantas vezes a fachada se repete ao longo do corredor. A foto é mais
-    // larga que alta (1.5:1) e a parede tem 10 unidades de altura, então cada
-    // repetição precisa cobrir ~15 unidades de comprimento pra manter a
-    // proporção — 45 / 15 = 3. Com o valor antigo (10 repetições, 4.5 unidades
-    // cada) a imagem esticava mais de 3x na vertical.
+    // A parede tem 10 unidades de altura, então cada
+    // repetição precisa cobrir 15 unidades de comprimento pra manter a
+    // proporção.
     const float PAREDE_REPETICOES = 3.0f;
-    // O offsetCenario é compartilhado com o chão, que usa 10 repetições. Sem
-    // reescalar aqui, a parede deslizaria 3x mais rápido que o piso.
-    const float PAREDE_SCROLL = PAREDE_REPETICOES / 10.0f;
+    const float PAREDE_SCROLL = PAREDE_REPETICOES / 10.0f; //Offset para manter mesma velocidade do chão
 
     for (int p = 0; p < 2; p++)
     {
@@ -400,36 +380,21 @@ void desenharCorredores()
     glDisable(GL_TEXTURE_2D);
 }
 
-// Desenha a sombra do jogador projetada a partir da luz que percorre o
-// corredor (LIGHT1 / spotViajanteZ), em vez de uma sombra fixa embaixo dele.
-// A sombra é deslocada/esticada na direção oposta à luz (mesma matemática de
-// projetar a reta luz->corpo até encontrar o chão em y=0, como a sombra real
-// de um poste de luz) e sua opacidade varia com a proximidade da luz: quase
-// invisível quando ela está longe, escura e concentrada quando passa por cima
-// do jogador. Precisa ser chamada de dentro da matriz do jogador (mesmo
-// referencial usado pra desenhá-lo), antes de desenhá-lo.
-// Calcula onde a sombra de um objeto cai no chão, e com que tamanho e força.
-// Serve para qualquer objeto da cena (jogador, carteiras, provas), já que a
-// projeção depende só da posição dele em relação à luz.
 void calcularSombra(float objX, float objZ, float corpoY,
                     float &sombraX, float &sombraZ,
                     float &escala, float &opacidade)
 {
-    // Posição/altura da luz que "projeta" a sombra (mesma usada pela LIGHT1
-    // em atualizarSpotsTeto() — X sempre 0, altura sempre 6).
+    // Posição/altura da luz que "projeta" a sombra
     const float luzX = 0.0f;
     const float luzY = 6.0f;
     const float luzZ = spotViajanteZ;
 
-    // Projeta a reta luz -> corpo até encontrar o chão (y=0): quanto mais a
-    // luz estiver deslocada em Z do objeto, mais a sombra se estica/desloca
-    // pro lado oposto, igual a uma sombra de poste de luz de verdade.
     float t = luzY / (luzY - corpoY);
     sombraX = luzX + t * (objX - luzX);
     sombraZ = luzZ + t * (objZ - luzZ);
 
     // Opacidade: forte quando a luz está bem perto do objeto (em Z), quase
-    // some quando ela está longe (sem luz forte o bastante pra revelar a sombra).
+    // some quando ela está longe
     float distLuz = fabsf(spotViajanteZ - objZ);
     const float raioEfeito = 6.0f;
     opacidade = 1.0f - (distLuz / raioEfeito);
@@ -438,18 +403,15 @@ void calcularSombra(float objX, float objZ, float corpoY,
     if (opacidade > 1.0f)
         opacidade = 1.0f;
 
-    // Escala: mesmo fator de projeção "t" usado na posição, normalizado pra
-    // valer 1.0 no chão (altura de referência 1.0). Fisicamente, quanto mais
-    // perto da luz (objeto mais alto), maior a sombra projetada.
-    escala = (luzY - 1.0f) / (luzY - corpoY);
+
+        escala = (luzY - 1.0f) / (luzY - corpoY);
     if (escala < 0.8f)
         escala = 0.8f; // Limite mínimo de tamanho
     if (escala > 2.5f)
         escala = 2.5f; // Limite máximo, pra não ficar absurda perto da luz
 }
 
-// Prepara o OpenGL para desenhar sombras: elas são silhuetas pretas
-// semitransparentes, sem iluminação nenhuma.
+// Remover luz para pintar sombra
 void iniciarSombras()
 {
     glDisable(GL_LIGHTING); // Sombra não recebe luz
@@ -465,8 +427,6 @@ void terminarSombras()
 
 void desenharSombraJogador(float inclinacao)
 {
-    // Altura aproximada do "corpo" do jogador que recebe a luz (sobe um
-    // pouco durante o pulo, arrastando a sombra projetada junto).
     float corpoY = 1.0f + playerY;
 
     float sombraX, sombraZ, escala, opacidade;
@@ -487,7 +447,7 @@ void desenharSombraJogador(float inclinacao)
 }
 
 // Sombra de um objeto qualquer da cena (carteira, prova), projetada pela mesma
-// luz e com a mesma matemática usada no jogador.
+// luz e calculado como no jogador.
 void desenharSombraObjeto(const OBJModel &modelo, float objX, float objY, float objZ,
                           float rotacaoY)
 {
@@ -516,10 +476,6 @@ void desenharCena()
     GLfloat mat_prof[] = {1.0f, 1.0f, 1.0f, 1.0f};
     glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, mat_prof);
 
-    // "dist" normalizada: 1 quando o professor está longe (Z inicial, -15),
-    // 0 quando ele chega no limite de game over (Z_GAMEOVER). Zerando G e B
-    // do especular conforme ele se aproxima, o reflexo vai de quase branco
-    // para vermelho puro — um aviso visual de perigo.
     float dist = (professorZ - Z_GAMEOVER) / (-15.0f - Z_GAMEOVER);
     if (dist < 0.0f)
         dist = 0.0f;
@@ -532,18 +488,13 @@ void desenharCena()
 
     glPushMatrix();
     glTranslatef(0.0f, 3.0f, professorZ);
-    // Subdividido numa grade (não um quad único): a iluminação do OpenGL é
-    // calculada por vértice, então um único quad de 10x10 só teria os 4 cantos
-    // como vértices, e a luz da LIGHT2 nunca formaria um foco concentrado no
-    // meio da imagem (mesmo motivo pelo qual o chão/paredes foram subdivididos
-    // em desenharCorredores()).
-    const int segmentosProf = 10;
+
+    //Grade de vértices para o professor
+    const int segmentosProf = 10;   
     const float ladoProf = 10.0f; // De -5 a 5
     const float passoProf = ladoProf / segmentosProf;
     glBegin(GL_QUADS);
-    // Sem isso, o quad herda a normal deixada pela última superfície desenhada
-    // em desenharCorredores() (uma parede lateral) e a LIGHT2 não ilumina nada.
-    glNormal3f(0.0f, 0.0f, 1.0f); // Billboard voltado pra câmera (+Z)
+    glNormal3f(0.0f, 0.0f, 1.0f); // Quadro voltado pra câmera (+Z)
     for (int iy = 0; iy < segmentosProf; iy++)
     {
         float y0 = -5.0f + iy * passoProf;
@@ -598,7 +549,7 @@ void desenharCena()
     estudanteModel.draw();
     glPopMatrix();
 
-    // Desenha os obstáculos (carteiras universitárias). Cada parte do modelo
+    // Desenha os obstáculos. Cada parte do modelo
     // tem seu próprio material vindo do .mtl: metal com reflexo concentrado,
     // plástico com brilho médio e madeira praticamente fosca.
     for (int i = 0; i < MAX_OBSTACULOS; i++)
@@ -633,16 +584,11 @@ void desenharCena()
         }
     }
 
-    // Desenha as provas (pilha de folhas, com a de cima dourada e bem
-    // especular pra brilhar quando o spot do corredor passa por ela)
+    // Desenha as provas
     for (int i = 0; i < MAX_PROVAS; i++)
     {
         if (provas[i].ativo)
         {
-            // Balanço da prova. É uma oscilação (vai e volta) em vez de um giro
-            // completo: como as folhas ficam em pé e têm pouca espessura, um
-            // giro de 360 graus as deixaria de perfil — quase invisíveis — duas
-            // vezes por volta. Assim elas ficam sempre legíveis de frente.
             float tempoAnim = sinf(glutGet(GLUT_ELAPSED_TIME) / 1000.0f * 1.6f) * 35.0f;
 
             if (temModeloProva)
@@ -672,11 +618,7 @@ void desenharCena()
     }
 }
 
-// Move o spot viajante (LIGHT1) ao longo do corredor (mesma lógica de scroll
-// usada pelos obstáculos/chão), acompanha o professor com a LIGHT2 (sempre
-// a uma altura fixa acima dele, não presa a um ponto do corredor) e faz a
-// intensidade piscar com uma senoide. Precisa ser chamada a cada frame,
-// depois do gluLookAt.
+// Move o spot viajante (LIGHT1) ao longo do corredor
 void atualizarSpotsTeto()
 {
     float tempo = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
@@ -689,32 +631,18 @@ void atualizarSpotsTeto()
     }
 
     GLfloat spot1_pos[] = {0.0f, 6.0f, spotViajanteZ, 1.0f};
-    // O centro do billboard do professor é desenhado em (0, 3, professorZ)
-    // (mesmo translate usado em desenharCena()). A luz fica um pouco à frente
-    // dele (Z maior, do lado da câmera/jogador) em vez de direto acima, pra
-    // não ficar perpendicular à imagem (que não refletiria nada).
     float profCentroX = 0.0f, profCentroY = 3.0f, profCentroZ = professorZ;
     GLfloat spot2_pos[] = {0.0f, SPOT_PROFESSOR_ALTURA, professorZ + SPOT_PROFESSOR_OFFSET_Z, 1.0f};
-    // Levemente inclinada para +/-Z (não reto pra baixo): o chão tem normal
-    // pra cima e pega luz bem de qualquer jeito, mas o personagem é visto de
-    // frente/costas (normal ~Z) e reto-pra-baixo quase não o atinge (N.L~0).
-    // Uma leve inclinação dá um N.L bem maior quando o spot passa perto dele.
     GLfloat dirFrente[] = {0.0f, -1.0f, -0.4f};
-    // Recalculada a cada frame pra sempre apontar de volta pro centro do
-    // professor, já que a luz agora está deslocada dele (não mais direto acima).
     GLfloat dirProf[] = {
         profCentroX - spot2_pos[0],
         profCentroY - spot2_pos[1],
         profCentroZ - spot2_pos[2]};
     glLightfv(GL_LIGHT1, GL_POSITION, spot1_pos);
     glLightfv(GL_LIGHT2, GL_POSITION, spot2_pos);
-    // Redefinida aqui (não só em init()) pra usar a mesma transformação de
-    // câmera (gluLookAt) que a posição, já aplicada nesse ponto do frame.
     glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, dirFrente);
     glLightfv(GL_LIGHT2, GL_SPOT_DIRECTION, dirProf);
 
-    // Piscar: intensidade oscila entre quase apagado e o brilho total.
-    // Fases diferentes (0 e PI) pra as duas luzes não piscarem em sincronia.
     float piscar1 = powf(0.5f + 0.5f * sinf(tempo * 4.0f), 3.0f);
     float piscar2 = powf(0.5f + 0.5f * sinf(tempo * 4.0f + 3.14159f), 3.0f);
     piscar1 = 0.1f + 0.9f * piscar1; // Nunca apaga 100%
@@ -727,9 +655,7 @@ void atualizarSpotsTeto()
     glLightfv(GL_LIGHT1, GL_DIFFUSE, spot1_difusa);
     glLightfv(GL_LIGHT2, GL_DIFFUSE, spot2_difusa);
 
-    // Especular acompanhando o piscar: reforça a sensação de "luz passando"
-    // no personagem (que é bem mais visível como brilho do que como difusa,
-    // já que suas superfícies voltadas pra câmera pegam pouca luz de cima).
+    
     GLfloat spot1_espec[] = {1.0f * piscar1, 1.0f * piscar1, 1.0f * piscar1, 1.0f};
     GLfloat spot2_espec[] = {1.0f * piscar2, 1.0f * piscar2, 1.0f * piscar2, 1.0f};
     glLightfv(GL_LIGHT1, GL_SPECULAR, spot1_espec);
@@ -750,9 +676,6 @@ void desenharHUD()
     glLoadIdentity();
 
     // Desliga luzes, profundidade e cull face para desenhar o HUD.
-    // O cull face precisa sair: essa projeção ortográfica (gluOrtho2D) tem o eixo
-    // Y invertido (origem no topo), o que inverte o sentido dos quads 2D e faria
-    // o cull remover os quads da imagem de fundo/skins por engano.
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -879,7 +802,7 @@ void display()
         glTranslatef(dx, dy, 0.0f);
     }
 
-    // --- AQUI ENTRARÃO OS DESENHOS DOS OBJETOS ---
+
     atualizarSpotsTeto();
     desenharCorredores();
     desenharCena();
@@ -1063,7 +986,7 @@ void timer(int value)
         {
             // Incrementa a velocidade do cenário
             score += (int)(10 * speedMultiplier); // Ganha pontos
-            speedMultiplier += 0.001f;
+            speedMultiplier += speedProgression;
 
             offsetCenario += (0.05f * speedMultiplier);
             if (offsetCenario > 10.0f)
