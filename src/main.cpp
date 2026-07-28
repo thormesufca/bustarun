@@ -161,7 +161,7 @@ void resetarJogo()
 void init()
 {
     // Define a cor do céu
-    glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
     // Ativa o Z-Buffer
     glEnable(GL_DEPTH_TEST);
