@@ -34,8 +34,8 @@ int menuSelecionado = 0; // 0: Jogar, 1: Skins, 2: Creditos, 3: Sair
 const int MAX_MENU_OPCOES = 4;
 
 int skinSelecionada = 0;
-const int MAX_SKINS = 3;
-const char *nomesSkins[MAX_SKINS] = {"Luis", "Tony", "Bustamante"};
+const int MAX_SKINS = 4;
+const char *nomesSkins[MAX_SKINS] = {"Luis", "Bustamante", "Luana", "Roberto"};
 
 // Nomes para os créditos
 const char *creditosNomes[] = {
@@ -210,8 +210,8 @@ void init()
     // Carregamento de Texturas
     texMenu = loadTexture("assets/textures/background.png");
     texProfessor = loadTexture("assets/textures/Luis.png");
-    texPisoUFCA = loadTexture("assets/textures/fig2.png");
-    texParedeUFCA = loadTexture("assets/textures/fig3.png");
+    texPisoUFCA = loadTexture("assets/textures/piso_ufca.png");
+    texParedeUFCA = loadTexture("assets/textures/parede_ufca.png");
 
     if (!estudanteModel.load("assets/models/estudante.obj"))
     {
@@ -223,8 +223,9 @@ void init()
     }
     // Skins
     texSkins[0] = loadTexture("assets/textures/Luis.png");
-    texSkins[1] = loadTexture("assets/textures/Tony.png");
-    texSkins[2] = loadTexture("assets/textures/Bustamante.png");
+    texSkins[1] = loadTexture("assets/textures/Bustamante.png");
+    texSkins[2] = loadTexture("assets/textures/Luana.png");
+    texSkins[3] = loadTexture("assets/textures/Roberto.png");
     texProfessor = texSkins[0]; // Skin Default
 
     // Obstáculos e prova: modelos .obj com vários materiais. Cada grupo
@@ -339,6 +340,16 @@ void desenharCorredores()
     // sentido anti-horário dos vértices, e as duas paredes são espelhadas.
     const bool paredesInverter[2] = {false, true};
 
+    // Quantas vezes a fachada se repete ao longo do corredor. A foto é mais
+    // larga que alta (1.5:1) e a parede tem 10 unidades de altura, então cada
+    // repetição precisa cobrir ~15 unidades de comprimento pra manter a
+    // proporção — 45 / 15 = 3. Com o valor antigo (10 repetições, 4.5 unidades
+    // cada) a imagem esticava mais de 3x na vertical.
+    const float PAREDE_REPETICOES = 3.0f;
+    // O offsetCenario é compartilhado com o chão, que usa 10 repetições. Sem
+    // reescalar aqui, a parede deslizaria 3x mais rápido que o piso.
+    const float PAREDE_SCROLL = PAREDE_REPETICOES / 10.0f;
+
     for (int p = 0; p < 2; p++)
     {
         float x = paredesX[p];
@@ -350,8 +361,8 @@ void desenharCorredores()
             float z0 = CORREDOR_Z_INICIO - iz * passoZ;
             float z1 = z0 - passoZ;
             // Desliza a textura no eixo U (horizontal, acompanhando o corredor)
-            float u0 = (float)iz / CORREDOR_SEGMENTOS_Z * 10.0f - offsetCenario;
-            float u1 = (float)(iz + 1) / CORREDOR_SEGMENTOS_Z * 10.0f - offsetCenario;
+            float u0 = (float)iz / CORREDOR_SEGMENTOS_Z * PAREDE_REPETICOES - offsetCenario * PAREDE_SCROLL;
+            float u1 = (float)(iz + 1) / CORREDOR_SEGMENTOS_Z * PAREDE_REPETICOES - offsetCenario * PAREDE_SCROLL;
             for (int iy = 0; iy < segmentosY; iy++)
             {
                 float y0 = iy * passoY;
