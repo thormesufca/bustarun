@@ -21,6 +21,12 @@ inline GLuint loadTexture(const char* filename) {
     
     if (data) {
         GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+        // Por padrão o OpenGL espera cada linha da imagem começando num
+        // múltiplo de 4 bytes. Numa textura RGB de largura ímpar (ex: 587x3
+        // = 1761 bytes por linha) a conta não fecha e cada linha sai
+        // deslocada, cortando a imagem na diagonal. O stb entrega os dados
+        // sem preenchimento, então avisamos que o alinhamento é de 1 byte.
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
     } else {
         std::cerr << "Falha ao carregar a textura: " << filename << std::endl;
